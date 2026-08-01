@@ -56,6 +56,14 @@ func (s *JWTService) VerifyPassword(hashedPassword, password string) error {
 
 func (s *JWTService) GenerateToken(_ context.Context, claims service.TokenClaims) (string, error) {
 	now := time.Now()
+
+	// Leave the claim out entirely for a user with no organization, rather than
+	// emitting the zero UUID, so `omitempty` can drop it.
+	orgID := ""
+	if claims.OrganizationID != uuid.Nil {
+		orgID = claims.OrganizationID.String()
+	}
+
 	c := customClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.issuer,
@@ -66,7 +74,7 @@ func (s *JWTService) GenerateToken(_ context.Context, claims service.TokenClaims
 		},
 		UserID:         claims.UserID.String(),
 		Email:          claims.Email,
-		OrganizationID: claims.OrganizationID.String(),
+		OrganizationID: orgID,
 		Roles:          claims.Roles,
 		Permissions:    claims.Permissions,
 	}

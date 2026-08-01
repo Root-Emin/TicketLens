@@ -188,6 +188,26 @@ func (r *RoleRepo) GetUserRoles(ctx context.Context, userID, orgID uuid.UUID) ([
 	return userRoles, nil
 }
 
+func (r *RoleRepo) GetPrimaryOrganization(ctx context.Context, userID uuid.UUID) (uuid.UUID, error) {
+	// TODO(multi-org): the MVP assumes a user belongs to exactly one
+	// organization, so the oldest assignment wins. Once multi-org membership is
+	// supported this should return every organization and let the caller pick
+	// the active one (e.g. from an X-Organization-ID header).
+	var orgID uuid.UUID
+	err := r.db.QueryRow(ctx,
+		`SELECT organization_id FROM user_roles WHERE user_id = $1
+		 ORDER BY created_at ASC LIMIT 1`, userID,
+	).Scan(&orgID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Not an error: the user simply has no organization yet.
+			return uuid.Nil, nil
+		}
+		return uuid.Nil, domainErr.New(domainErr.ErrInternal, "failed to resolve user organization", err)
+	}
+	return orgID, nil
+}
+
 func (r *RoleRepo) GetUserPermissions(ctx context.Context, userID, orgID uuid.UUID) ([]string, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT DISTINCT rp.permission

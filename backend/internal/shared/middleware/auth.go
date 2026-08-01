@@ -89,6 +89,35 @@ func RequirePermission(rbac service.RBACService, permission string) func(http.Ha
 	}
 }
 
+// RequireAnyPermission is middleware that admits a caller holding at least one
+// of the given permissions. It backs contract entries like
+// "department:manage or ticket:read".
+func RequireAnyPermission(rbac service.RBACService, permissions ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userID, ok := r.Context().Value(ContextKeyUserID).(uuid.UUID)
+			if !ok {
+				response.JSON(w, http.StatusUnauthorized, map[string]string{"error": "user not authenticated"})
+				return
+			}
+
+			orgID, _ := r.Context().Value(ContextKeyOrganizationID).(uuid.UUID)
+
+			has, err := rbac.HasAnyPermission(r.Context(), userID, orgID, permissions)
+			if err != nil {
+				response.JSON(w, http.StatusInternalServerError, map[string]string{"error": "permission check failed"})
+				return
+			}
+			if !has {
+				response.JSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // UserIDFromContext extracts the authenticated user ID from the context.
 func UserIDFromContext(ctx context.Context) (uuid.UUID, bool) {
 	id, ok := ctx.Value(ContextKeyUserID).(uuid.UUID)

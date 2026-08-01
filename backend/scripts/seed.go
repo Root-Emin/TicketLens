@@ -72,11 +72,14 @@ func seedRoles(ctx context.Context, db *pgxpool.Pool) error {
 
 	for _, r := range roles {
 		roleID := uuid.New()
+		// scope_id is the zero UUID: these are template roles, not bound to a
+		// specific organization. The unique constraint is on the
+		// (scope_type, scope_id, name) triple, so ON CONFLICT must match it.
 		_, err := db.Exec(ctx, `
-			INSERT INTO roles (id, name, description, created_at, updated_at)
-			VALUES ($1, $2, $3, NOW(), NOW())
-			ON CONFLICT (name) DO NOTHING
-		`, roleID, r.name, r.description)
+			INSERT INTO roles (id, scope_type, scope_id, name, description, created_at, updated_at)
+			VALUES ($1, 'organization', $2, $3, $4, NOW(), NOW())
+			ON CONFLICT (scope_type, scope_id, name) DO NOTHING
+		`, roleID, uuid.Nil, r.name, r.description)
 		if err != nil {
 			return fmt.Errorf("insert role %s: %w", r.name, err)
 		}

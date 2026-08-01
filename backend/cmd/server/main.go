@@ -15,6 +15,8 @@ import (
 
 	// Infrastructure
 	infraAuth "github.com/masterfabric-go/masterfabric/internal/infrastructure/auth"
+	stubClassifier "github.com/masterfabric-go/masterfabric/internal/infrastructure/classifier/stub"
+	infraTriage "github.com/masterfabric-go/masterfabric/internal/infrastructure/triage"
 	apimgmtHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/apimanagement"
 	auditHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/audit"
 	iamHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/iam"
@@ -27,12 +29,15 @@ import (
 	pgAudit "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/audit"
 	pgIam "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/iam"
 	pgTenant "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/tenant"
+	pgTriage "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/triage"
+	triageHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/triage"
 
 	// Application use cases
 	apimgmtUC "github.com/masterfabric-go/masterfabric/internal/application/apimanagement/usecase"
 	iamUC "github.com/masterfabric-go/masterfabric/internal/application/iam/usecase"
 	realtimeUC "github.com/masterfabric-go/masterfabric/internal/application/realtime/usecase"
 	tenantUC "github.com/masterfabric-go/masterfabric/internal/application/tenant/usecase"
+	triageUC "github.com/masterfabric-go/masterfabric/internal/application/triage/usecase"
 
 	// Gateway
 	"github.com/masterfabric-go/masterfabric/internal/gateway"
@@ -111,6 +116,14 @@ func run() error {
 	// Build dependencies
 	deps := buildDependencies(log, cfg, db, redisClient, eventBus)
 
+	// Start consuming only now: Consumer.Start creates one reader per SUBSCRIBED
+	// topic, and every Subscribe call happens inside buildDependencies. Starting
+	// earlier would iterate an empty handler map and silently consume nothing.
+	if kafkaBus, ok := eventBus.(*infraKafka.Bus); ok {
+		kafkaBus.Start(context.Background())
+		log.Info("kafka consumers started")
+	}
+
 	// Build router
 	r := router.New(deps)
 
@@ -183,10 +196,8 @@ func initEventBus(ctx context.Context, cfg *config.Config, log *slog.Logger) eve
 
 	kafkaBus := infraKafka.NewBus(cfg.Kafka.Brokers, cfg.Kafka.GroupID, log)
 
-	// Start consuming (after subscriptions are registered in buildDependencies)
-	// We start consumption with a background context so it outlives the startup ctx.
-	kafkaBus.Start(context.Background())
-
+	// Consumption deliberately does NOT start here: subscriptions are registered
+	// later, in buildDependencies. run() starts the readers once they exist.
 	log.Info("kafka event bus initialized")
 	return kafkaBus
 }
@@ -221,6 +232,12 @@ func buildDependencies(
 	endpointRepo := pgApimgmt.NewEndpointRepo(db)
 	policyRepo := pgApimgmt.NewPolicyRepo(db)
 	auditRepo := pgAudit.NewAuditRepo(db)
+	departmentRepo := pgTriage.NewDepartmentRepo(db)
+	customerRepo := pgTriage.NewCustomerRepo(db)
+	ticketRepo := pgTriage.NewTicketRepo(db)
+	ticketMessageRepo := pgTriage.NewTicketMessageRepo(db)
+	aiAnalysisRepo := pgTriage.NewAIAnalysisRepo(db)
+	statsRepo := pgTriage.NewStatsRepo(db)
 
 	// --- Services ---
 	jwtService := infraAuth.NewJWTService(cfg.JWT)
@@ -233,9 +250,9 @@ func buildDependencies(
 
 	// --- Use cases (with event bus for domain event publishing) ---
 	registerUC := iamUC.NewRegisterUseCase(userRepo, jwtService, eventBus)
-	loginUC := iamUC.NewLoginUseCase(userRepo, jwtService)
+	loginUC := iamUC.NewLoginUseCase(userRepo, roleRepo, jwtService)
 	assignRoleUC := iamUC.NewAssignRoleUseCase(roleRepo, rbacService, eventBus)
-	createOrgUC := tenantUC.NewCreateOrgUseCase(orgRepo, eventBus)
+	createOrgUC := tenantUC.NewCreateOrgUseCase(orgRepo, roleRepo, departmentRepo, eventBus)
 	createWorkspaceUC := tenantUC.NewCreateWorkspaceUseCase(workspaceRepo, orgRepo, eventBus)
 	listWorkspacesUC := tenantUC.NewListWorkspacesUseCase(workspaceRepo)
 	updateWorkspaceUC := tenantUC.NewUpdateWorkspaceUseCase(workspaceRepo)
@@ -277,6 +294,49 @@ func buildDependencies(
 	)
 	deps.APIMgmtHandler = apimgmtHandler.NewHandler(defineEndpointUC, updatePolicyUC, retireEndpointUC, activateEndpointUC, endpointRepo, policyRepo)
 	deps.AuditHandler = auditHandler.NewHandler(auditRepo)
+
+	// --- Triage (ticketing) ---
+	// The stub classifier keeps the backend fully functional without the model
+	// service; an HTTP adapter will replace it behind the same port.
+	ticketClassifier := stubClassifier.New()
+	analyzeTicketUC := triageUC.NewAnalyzeTicketUseCase(
+		ticketRepo, ticketMessageRepo, departmentRepo, customerRepo, aiAnalysisRepo, userRepo,
+		ticketClassifier, cfg.Classifier.ReviewThreshold,
+	)
+
+	deps.TriageHandler = triageHandler.NewHandler(triageHandler.Config{
+		ListDepartments:  triageUC.NewListDepartmentsUseCase(departmentRepo, ticketRepo),
+		CreateDepartment: triageUC.NewCreateDepartmentUseCase(departmentRepo),
+		UpdateDepartment: triageUC.NewUpdateDepartmentUseCase(departmentRepo, ticketRepo),
+		DeleteDepartment: triageUC.NewDeleteDepartmentUseCase(departmentRepo, ticketRepo),
+
+		ListCustomers:  triageUC.NewListCustomersUseCase(customerRepo),
+		CreateCustomer: triageUC.NewCreateCustomerUseCase(customerRepo),
+		GetCustomer: triageUC.NewGetCustomerUseCase(
+			customerRepo, ticketRepo, departmentRepo, ticketMessageRepo, aiAnalysisRepo, userRepo),
+
+		CreateTicket: triageUC.NewCreateTicketUseCase(
+			ticketRepo, ticketMessageRepo, customerRepo, departmentRepo, aiAnalysisRepo, userRepo, eventBus),
+		ListTickets: triageUC.NewListTicketsUseCase(
+			ticketRepo, departmentRepo, customerRepo, ticketMessageRepo, aiAnalysisRepo, userRepo),
+		GetTicket: triageUC.NewGetTicketUseCase(
+			ticketRepo, departmentRepo, customerRepo, ticketMessageRepo, aiAnalysisRepo, userRepo),
+		UpdateTicket: triageUC.NewUpdateTicketUseCase(
+			ticketRepo, aiAnalysisRepo, departmentRepo, customerRepo, ticketMessageRepo, userRepo, auditRepo, eventBus),
+		AssignTicket: triageUC.NewAssignTicketUseCase(
+			ticketRepo, roleRepo, departmentRepo, customerRepo, ticketMessageRepo, aiAnalysisRepo, userRepo, eventBus),
+
+		ListMessages:  triageUC.NewListMessagesUseCase(ticketRepo, ticketMessageRepo),
+		CreateMessage: triageUC.NewCreateMessageUseCase(ticketRepo, ticketMessageRepo),
+		ListAnalyses:  triageUC.NewListAnalysesUseCase(ticketRepo, aiAnalysisRepo),
+		AnalyzeTicket: analyzeTicketUC,
+
+		StatsOverview: triageUC.NewStatsOverviewUseCase(statsRepo),
+	})
+
+	// Classify newly created tickets off the event bus. The consumer is
+	// idempotent, so at-least-once delivery cannot double-analyze a ticket.
+	infraTriage.NewTicketConsumer(analyzeTicketUC, log).Register(eventBus)
 
 	// --- WebSocket real-time hub ---
 	wsHub := infraWS.NewHub(log, cfg.WebSocket.MaxConnections)

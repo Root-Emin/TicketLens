@@ -18,6 +18,7 @@ import (
 	iamHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/iam"
 	realtimeHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/realtime"
 	tenantHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/tenant"
+	triageHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/triage"
 
 	// Services & middleware
 	iamService "github.com/masterfabric-go/masterfabric/internal/domain/iam/service"
@@ -33,6 +34,13 @@ func maybeRequirePermission(rbac iamService.RBACService, permission string) func
 		return func(next http.Handler) http.Handler { return next }
 	}
 	return middleware.RequirePermission(rbac, permission)
+}
+
+func maybeRequireAnyPermission(rbac iamService.RBACService, permissions ...string) func(http.Handler) http.Handler {
+	if rbac == nil {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return middleware.RequireAnyPermission(rbac, permissions...)
 }
 
 // Dependencies holds all injected dependencies for the router.
@@ -54,6 +62,7 @@ type Dependencies struct {
 	APIMgmtHandler  *apimgmtHandler.Handler
 	AuditHandler    *auditHandler.Handler
 	RealtimeHandler *realtimeHandler.Handler
+	TriageHandler   *triageHandler.Handler
 
 	// Gateway
 	GatewayPipeline *gateway.Pipeline
@@ -106,15 +115,18 @@ func New(deps Dependencies) *chi.Mux {
 				r.Use(middleware.TenantResolverWithWorkspace(deps.OrgRepo, deps.WorkspaceRepo))
 			}
 
-			// WebSocket endpoint (before gateway pipeline — upgrade requests are not HTTP proxy)
-			if deps.RealtimeHandler != nil {
-				r.Get("/ws", deps.RealtimeHandler.Connect)
-			}
-
 			// Gateway pipeline (rate limiting, permission enforcement for managed endpoints)
-			// Must be applied before specific routes so it can handle dynamic endpoints
+			// Must be applied before specific routes so it can handle dynamic endpoints.
+			// chi requires every Use() to precede the first route on this mux, so this
+			// stays above /ws. WebSocket upgrades are not proxied: shouldSkipPipeline
+			// short-circuits the /api/v1/ws prefix.
 			if deps.GatewayPipeline != nil {
 				r.Use(deps.GatewayPipeline.Enforce)
+			}
+
+			// WebSocket endpoint
+			if deps.RealtimeHandler != nil {
+				r.Get("/ws", deps.RealtimeHandler.Connect)
 			}
 
 			// User routes
@@ -130,7 +142,10 @@ func New(deps Dependencies) *chi.Mux {
 			// Organization routes
 			if deps.TenantHandler != nil {
 				r.Route("/organizations", func(r chi.Router) {
-					r.With(maybeRequirePermission(deps.RBACService, "org:write")).Post("/", deps.TenantHandler.CreateOrg)
+					// Self-signup: any authenticated user may create an organization
+					// and becomes its owner. Requiring org:write here would be
+					// unsatisfiable — a user with no organization has no permissions.
+					r.Post("/", deps.TenantHandler.CreateOrg)
 					r.With(maybeRequirePermission(deps.RBACService, "org:read")).Get("/", deps.TenantHandler.ListOrgs)
 					r.Route("/{orgId}", func(r chi.Router) {
 						r.With(maybeRequirePermission(deps.RBACService, "org:read")).Get("/", deps.TenantHandler.GetOrg)
@@ -186,6 +201,60 @@ func New(deps Dependencies) *chi.Mux {
 			// Audit logs by user
 			if deps.AuditHandler != nil {
 				r.With(maybeRequirePermission(deps.RBACService, "org:read")).Get("/users/{userId}/audit-logs", deps.AuditHandler.ListByUser)
+			}
+
+			// Ticketing (triage). Every route resolves its organization from the
+			// JWT claims, never from the path, so these are flat rather than
+			// nested under /organizations/{orgId}.
+			if deps.TriageHandler != nil {
+				r.Route("/departments", func(r chi.Router) {
+					r.With(maybeRequireAnyPermission(deps.RBACService, "department:manage", "ticket:read")).
+						Get("/", deps.TriageHandler.ListDepartments)
+					r.With(maybeRequirePermission(deps.RBACService, "department:manage")).
+						Post("/", deps.TriageHandler.CreateDepartment)
+					r.With(maybeRequirePermission(deps.RBACService, "department:manage")).
+						Patch("/{departmentId}", deps.TriageHandler.UpdateDepartment)
+					r.With(maybeRequirePermission(deps.RBACService, "department:manage")).
+						Delete("/{departmentId}", deps.TriageHandler.DeleteDepartment)
+				})
+
+				r.Route("/customers", func(r chi.Router) {
+					r.Use(maybeRequirePermission(deps.RBACService, "customer:manage"))
+					r.Get("/", deps.TriageHandler.ListCustomers)
+					r.Post("/", deps.TriageHandler.CreateCustomer)
+					r.Get("/{customerId}", deps.TriageHandler.GetCustomer)
+				})
+
+				r.Route("/tickets", func(r chi.Router) {
+					r.With(maybeRequirePermission(deps.RBACService, "ticket:create")).
+						Post("/", deps.TriageHandler.CreateTicket)
+					r.With(maybeRequireAnyPermission(deps.RBACService, "ticket:read", "ticket:read_own")).
+						Get("/", deps.TriageHandler.ListTickets)
+
+					r.Route("/{ticketId}", func(r chi.Router) {
+						r.With(maybeRequireAnyPermission(deps.RBACService, "ticket:read", "ticket:read_own")).
+							Get("/", deps.TriageHandler.GetTicket)
+						r.With(maybeRequirePermission(deps.RBACService, "ticket:update")).
+							Patch("/", deps.TriageHandler.UpdateTicket)
+						r.With(maybeRequirePermission(deps.RBACService, "ticket:assign")).
+							Post("/assign", deps.TriageHandler.AssignTicket)
+
+						r.With(maybeRequireAnyPermission(deps.RBACService, "ticket:read", "ticket:read_own")).
+							Get("/messages", deps.TriageHandler.ListMessages)
+						r.With(maybeRequirePermission(deps.RBACService, "message:create")).
+							Post("/messages", deps.TriageHandler.CreateMessage)
+
+						r.With(maybeRequirePermission(deps.RBACService, "analysis:read")).
+							Get("/analyses", deps.TriageHandler.ListAnalyses)
+						// Re-running classification needs both permissions.
+						r.With(maybeRequirePermission(deps.RBACService, "analysis:read")).
+							With(maybeRequirePermission(deps.RBACService, "ticket:update")).
+							Post("/analyses", deps.TriageHandler.RerunAnalysis)
+					})
+				})
+
+				r.With(maybeRequirePermission(deps.RBACService, "stats:read")).
+					Get("/stats/overview", deps.TriageHandler.StatsOverview)
 			}
 
 			// Catch-all handler for managed endpoints (must be last in the group)

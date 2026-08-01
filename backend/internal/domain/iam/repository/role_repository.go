@@ -25,4 +25,9 @@ type RoleRepository interface {
 	RemoveRoleFromUser(ctx context.Context, userID, roleID uuid.UUID) error
 	GetUserRoles(ctx context.Context, userID, orgID uuid.UUID) ([]*model.UserRole, error)
 	GetUserPermissions(ctx context.Context, userID, orgID uuid.UUID) ([]string, error)
+
+	// GetPrimaryOrganization returns the organization a user belongs to, based on
+	// their role assignments. It returns uuid.Nil (and no error) for a user who
+	// has not been assigned to any organization yet.
+	GetPrimaryOrganization(ctx context.Context, userID uuid.UUID) (uuid.UUID, error)
 }

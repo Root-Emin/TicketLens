@@ -75,7 +75,7 @@ clean:
 	@echo "Cleaning..."
 	rm -rf $(BUILD_DIR) coverage.out coverage.html tmp
 
-## seed: Seed the database with sample data
+## seed: Seed the database with the demo tenant (idempotent)
 seed:
 	@echo "Seeding database..."
-	go run ./scripts/seed.go
+	go run ./cmd/seed

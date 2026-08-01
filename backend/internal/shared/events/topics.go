@@ -15,6 +15,9 @@ const (
 
 	// Audit events (consumers write to audit log)
 	TopicAudit = "masterfabric.audit"
+
+	// Ticketing / triage events (the classification consumer listens here)
+	TopicTriage = "masterfabric.triage"
 )
 
 // Event type constants used in Envelope.Type for routing / filtering.
@@ -34,4 +37,9 @@ const (
 	EventTypeEndpointCreated = "endpoint.created"
 	EventTypeEndpointUpdated = "endpoint.updated"
 	EventTypeEndpointRetired = "endpoint.retired"
+
+	// Triage
+	EventTypeTicketCreated  = "ticket.created"
+	EventTypeTicketUpdated  = "ticket.updated"
+	EventTypeTicketAssigned = "ticket.assigned"
 )

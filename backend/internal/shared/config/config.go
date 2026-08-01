@@ -11,13 +11,14 @@ import (
 
 // Config holds all application configuration.
 type Config struct {
-	Server    ServerConfig
-	Database  DatabaseConfig
-	Redis     RedisConfig
-	JWT       JWTConfig
-	Kafka     KafkaConfig
-	WebSocket WebSocketConfig
-	Log       LogConfig
+	Server     ServerConfig
+	Database   DatabaseConfig
+	Redis      RedisConfig
+	JWT        JWTConfig
+	Kafka      KafkaConfig
+	WebSocket  WebSocketConfig
+	Log        LogConfig
+	Classifier ClassifierConfig
 }
 
 // WebSocketConfig holds real-time WebSocket settings.
@@ -31,13 +32,13 @@ type WebSocketConfig struct {
 
 // ServerConfig holds HTTP server settings.
 type ServerConfig struct {
-	Host              string
-	Port              int
-	ReadTimeout       time.Duration
-	WriteTimeout      time.Duration
-	IdleTimeout       time.Duration
+	Host               string
+	Port               int
+	ReadTimeout        time.Duration
+	WriteTimeout       time.Duration
+	IdleTimeout        time.Duration
 	CORSAllowedOrigins []string
-	MaxBodyBytes      int64
+	MaxBodyBytes       int64
 }
 
 // DatabaseConfig holds PostgreSQL connection settings.
@@ -99,6 +100,13 @@ type LogConfig struct {
 	Format string // json, text
 }
 
+// ClassifierConfig holds ticket classification settings.
+type ClassifierConfig struct {
+	// ReviewThreshold is the confidence below which an analysis is flagged for
+	// human review. Applied to both the priority and the category score.
+	ReviewThreshold float64
+}
+
 // Load reads configuration from environment variables with sensible defaults.
 func Load() *Config {
 	return &Config{
@@ -150,7 +158,19 @@ func Load() *Config {
 			Level:  envOrDefault("LOG_LEVEL", "info"),
 			Format: envOrDefault("LOG_FORMAT", "json"),
 		},
+		Classifier: ClassifierConfig{
+			ReviewThreshold: envOrDefaultFloat("CLASSIFIER_REVIEW_THRESHOLD", 0.60),
+		},
 	}
+}
+
+func envOrDefaultFloat(key string, defaultVal float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return defaultVal
 }
 
 func envOrDefault(key, defaultVal string) string {

@@ -12,12 +12,13 @@ import (
 // LoginUseCase handles user authentication.
 type LoginUseCase struct {
 	userRepo repository.UserRepository
+	roleRepo repository.RoleRepository
 	auth     service.AuthService
 }
 
 // NewLoginUseCase creates a new LoginUseCase.
-func NewLoginUseCase(userRepo repository.UserRepository, auth service.AuthService) *LoginUseCase {
-	return &LoginUseCase{userRepo: userRepo, auth: auth}
+func NewLoginUseCase(userRepo repository.UserRepository, roleRepo repository.RoleRepository, auth service.AuthService) *LoginUseCase {
+	return &LoginUseCase{userRepo: userRepo, roleRepo: roleRepo, auth: auth}
 }
 
 // Execute authenticates a user and returns a JWT token.
@@ -35,9 +36,19 @@ func (uc *LoginUseCase) Execute(ctx context.Context, req dto.LoginRequest) (*dto
 		return nil, err
 	}
 
+	// Resolve which organization the user belongs to and put it in the token:
+	// permission checks read organization_id straight from the claims. A user
+	// with no organization gets uuid.Nil, logs in fine, and is denied by any
+	// endpoint that needs an organization.
+	orgID, err := uc.roleRepo.GetPrimaryOrganization(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	token, err := uc.auth.GenerateToken(ctx, service.TokenClaims{
-		UserID: user.ID,
-		Email:  user.Email,
+		UserID:         user.ID,
+		Email:          user.Email,
+		OrganizationID: orgID,
 	})
 	if err != nil {
 		return nil, domainErr.New(domainErr.ErrInternal, "failed to generate token", err)

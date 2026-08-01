@@ -14,6 +14,11 @@ const (
 	ScopeTypeApp          ScopeType = "app"
 )
 
+// TemplateScopeID marks the seeded template roles (see scripts/seed.go). They
+// belong to no organization; creating an organization clones them, replacing
+// the scope with the new organization's own ID.
+var TemplateScopeID = uuid.Nil
+
 // Role represents an RBAC role.
 type Role struct {
 	ID          uuid.UUID `json:"id"`
