@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/model"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/model"
 )
 
 // APIKeyRepository defines the interface for API key persistence.

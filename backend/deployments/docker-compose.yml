@@ -74,6 +74,30 @@ services:
       kafka:
         condition: service_healthy
 
+  # Python multi-task classifier (FastAPI). Point the Go backend at it with
+  # CLASSIFIER_URL=http://localhost:8091 (or http://classifier:8091 from another
+  # container). Without a trained checkpoint it serves the keyword stub.
+  #
+  # Paths are relative to this file (backend/deployments/), so ../ml is
+  # backend/ml — the ML workspace lives inside the backend, not at the repo root.
+  classifier:
+    build:
+      context: ../ml
+      dockerfile: Dockerfile
+    container_name: ticketlens-classifier
+    ports:
+      - "${CLASSIFIER_HOST_BIND:-127.0.0.1}:${CLASSIFIER_PORT:-8091}:8091"
+    environment:
+      MODEL_DIR: /models
+    volumes:
+      - ../ml/models:/models:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
 volumes:
   pgdata:
   redisdata:

@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	triageDTO "github.com/masterfabric-go/masterfabric/internal/application/triage/dto"
-	triageUC "github.com/masterfabric-go/masterfabric/internal/application/triage/usecase"
-	triageModel "github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
+	triageDTO "github.com/Root-Emin/TicketLens/internal/application/triage/dto"
+	triageUC "github.com/Root-Emin/TicketLens/internal/application/triage/usecase"
+	triageModel "github.com/Root-Emin/TicketLens/internal/domain/triage/model"
 )
 
 const (

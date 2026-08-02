@@ -4,13 +4,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/application/triage/dto"
+	iamRepo "github.com/Root-Emin/TicketLens/internal/domain/iam/repository"
+	triageEvent "github.com/Root-Emin/TicketLens/internal/domain/triage/event"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/triage/dto"
-	iamRepo "github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
-	triageEvent "github.com/masterfabric-go/masterfabric/internal/domain/triage/event"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
 )
 
 // AssignTicketUseCase sets or clears a ticket's assignee.

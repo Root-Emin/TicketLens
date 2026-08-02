@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/Root-Emin/TicketLens/internal/shared/response"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/masterfabric-go/masterfabric/internal/shared/response"
 	"github.com/redis/go-redis/v9"
 )
 

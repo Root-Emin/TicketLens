@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Root-Emin/TicketLens/internal/shared/config"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/masterfabric-go/masterfabric/internal/shared/config"
 )
 
 // NewPostgresPool creates a new PostgreSQL connection pool.

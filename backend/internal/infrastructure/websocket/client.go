@@ -4,9 +4,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/realtime/model"
+	realtimeService "github.com/Root-Emin/TicketLens/internal/domain/realtime/service"
 	gorillaws "github.com/gorilla/websocket"
-	"github.com/masterfabric-go/masterfabric/internal/domain/realtime/model"
-	realtimeService "github.com/masterfabric-go/masterfabric/internal/domain/realtime/service"
 )
 
 // client represents a single WebSocket connection.

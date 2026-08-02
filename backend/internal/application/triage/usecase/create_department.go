@@ -2,13 +2,14 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	"github.com/Root-Emin/TicketLens/internal/application/triage/dto"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/triage/dto"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 )
 
 // CreateDepartmentUseCase handles department creation.
@@ -26,7 +27,11 @@ func NewCreateDepartmentUseCase(departmentRepo repository.DepartmentRepository) 
 func (uc *CreateDepartmentUseCase) Execute(ctx context.Context, orgID uuid.UUID, req dto.CreateDepartmentRequest) (*dto.DepartmentInfo, error) {
 	name := strings.TrimSpace(req.Name)
 
-	if existing, _ := uc.departmentRepo.GetByName(ctx, orgID, name); existing != nil {
+	existing, err := uc.departmentRepo.GetByName(ctx, orgID, name)
+	if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+		return nil, err
+	}
+	if existing != nil {
 		return nil, domainErr.New(domainErr.ErrAlreadyExists, "department name already taken in this organization", nil)
 	}
 
@@ -43,7 +48,11 @@ func (uc *CreateDepartmentUseCase) Execute(ctx context.Context, orgID uuid.UUID,
 			return nil, domainErr.New(domainErr.ErrValidation, "unknown category: "+*req.Category, nil)
 		}
 		// One department per category keeps the classifier mapping deterministic.
-		if taken, _ := uc.departmentRepo.GetByCategory(ctx, orgID, category); taken != nil {
+		taken, err := uc.departmentRepo.GetByCategory(ctx, orgID, category)
+		if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+			return nil, err
+		}
+		if taken != nil {
 			return nil, domainErr.New(domainErr.ErrAlreadyExists,
 				"another department already handles category "+*req.Category, nil)
 		}

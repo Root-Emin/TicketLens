@@ -3,24 +3,24 @@ package apimanagement
 import (
 	"net/http"
 
+	"github.com/Root-Emin/TicketLens/internal/application/apimanagement/dto"
+	"github.com/Root-Emin/TicketLens/internal/application/apimanagement/usecase"
+	"github.com/Root-Emin/TicketLens/internal/domain/apimanagement/repository"
+	"github.com/Root-Emin/TicketLens/internal/shared/pagination"
+	"github.com/Root-Emin/TicketLens/internal/shared/response"
+	"github.com/Root-Emin/TicketLens/internal/shared/validator"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/apimanagement/dto"
-	"github.com/masterfabric-go/masterfabric/internal/application/apimanagement/usecase"
-	"github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/repository"
-	"github.com/masterfabric-go/masterfabric/internal/shared/pagination"
-	"github.com/masterfabric-go/masterfabric/internal/shared/response"
-	"github.com/masterfabric-go/masterfabric/internal/shared/validator"
 )
 
 // Handler provides API Management HTTP handlers.
 type Handler struct {
-	defineEndpointUC  *usecase.DefineEndpointUseCase
-	updatePolicyUC    *usecase.UpdatePolicyUseCase
-	retireEndpointUC  *usecase.RetireEndpointUseCase
+	defineEndpointUC   *usecase.DefineEndpointUseCase
+	updatePolicyUC     *usecase.UpdatePolicyUseCase
+	retireEndpointUC   *usecase.RetireEndpointUseCase
 	activateEndpointUC *usecase.ActivateEndpointUseCase
-	endpointRepo      repository.EndpointRepository
-	policyRepo        repository.PolicyRepository
+	endpointRepo       repository.EndpointRepository
+	policyRepo         repository.PolicyRepository
 }
 
 // NewHandler creates a new API Management handler.
@@ -33,12 +33,12 @@ func NewHandler(
 	policyRepo repository.PolicyRepository,
 ) *Handler {
 	return &Handler{
-		defineEndpointUC:  defineEndpointUC,
-		updatePolicyUC:    updatePolicyUC,
-		retireEndpointUC:  retireEndpointUC,
+		defineEndpointUC:   defineEndpointUC,
+		updatePolicyUC:     updatePolicyUC,
+		retireEndpointUC:   retireEndpointUC,
 		activateEndpointUC: activateEndpointUC,
-		endpointRepo:      endpointRepo,
-		policyRepo:        policyRepo,
+		endpointRepo:       endpointRepo,
+		policyRepo:         policyRepo,
 	}
 }
 

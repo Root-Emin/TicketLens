@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
+	apimgmtEvent "github.com/Root-Emin/TicketLens/internal/domain/apimanagement/event"
+	"github.com/Root-Emin/TicketLens/internal/domain/apimanagement/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/apimanagement/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
 	"github.com/google/uuid"
-	apimgmtEvent "github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/event"
-	"github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
 )
 
 // RetireEndpointUseCase handles retiring an endpoint.

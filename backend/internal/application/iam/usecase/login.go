@@ -3,10 +3,10 @@ package usecase
 import (
 	"context"
 
-	"github.com/masterfabric-go/masterfabric/internal/application/iam/dto"
-	"github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
-	"github.com/masterfabric-go/masterfabric/internal/domain/iam/service"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
+	"github.com/Root-Emin/TicketLens/internal/application/iam/dto"
+	"github.com/Root-Emin/TicketLens/internal/domain/iam/repository"
+	"github.com/Root-Emin/TicketLens/internal/domain/iam/service"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 )
 
 // LoginUseCase handles user authentication.

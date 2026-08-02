@@ -11,6 +11,7 @@ import (
 
 // Config holds all application configuration.
 type Config struct {
+	Env        string
 	Server     ServerConfig
 	Database   DatabaseConfig
 	Redis      RedisConfig
@@ -19,6 +20,61 @@ type Config struct {
 	WebSocket  WebSocketConfig
 	Log        LogConfig
 	Classifier ClassifierConfig
+}
+
+// Recognized values for APP_ENV.
+const (
+	EnvDevelopment = "development"
+	EnvStaging     = "staging"
+	EnvProduction  = "production"
+)
+
+// InsecureJWTSecret is the placeholder shipped for local development. It is
+// rejected outside EnvDevelopment so a deployment can never sign tokens with a
+// value that is public knowledge.
+const InsecureJWTSecret = "change-me-in-production"
+
+// minJWTSecretLength is the shortest secret accepted outside development. HS256
+// keys shorter than the hash output add no strength.
+const minJWTSecretLength = 32
+
+// IsDevelopment reports whether the process is running in local development,
+// the only mode where insecure defaults are tolerated.
+func (c *Config) IsDevelopment() bool { return c.Env == EnvDevelopment }
+
+// Validate rejects configurations that are unsafe to serve traffic with.
+//
+// Development is deliberately permissive so `./start.sh` keeps working with no
+// environment file. Every other environment must supply real secrets: a
+// misconfigured deployment should fail loudly at boot rather than accept
+// forged tokens for the rest of its life.
+func (c *Config) Validate() error {
+	if c.IsDevelopment() {
+		return nil
+	}
+
+	switch c.Env {
+	case EnvStaging, EnvProduction:
+	default:
+		return fmt.Errorf("APP_ENV must be one of %q, %q, %q (got %q)",
+			EnvDevelopment, EnvStaging, EnvProduction, c.Env)
+	}
+
+	if c.JWT.Secret == InsecureJWTSecret {
+		return fmt.Errorf("JWT_SECRET is still the development default; set a real secret for APP_ENV=%s", c.Env)
+	}
+	if len(c.JWT.Secret) < minJWTSecretLength {
+		return fmt.Errorf("JWT_SECRET must be at least %d characters for APP_ENV=%s (got %d)",
+			minJWTSecretLength, c.Env, len(c.JWT.Secret))
+	}
+	if c.Database.Password == defaultDBPassword {
+		return fmt.Errorf("DB_PASSWORD is still the development default; set a real password for APP_ENV=%s", c.Env)
+	}
+	if len(c.Server.CORSAllowedOrigins) == 0 {
+		return fmt.Errorf("CORS_ALLOWED_ORIGINS must list explicit origins for APP_ENV=%s", c.Env)
+	}
+
+	return nil
 }
 
 // WebSocketConfig holds real-time WebSocket settings.
@@ -105,11 +161,34 @@ type ClassifierConfig struct {
 	// ReviewThreshold is the confidence below which an analysis is flagged for
 	// human review. Applied to both the priority and the category score.
 	ReviewThreshold float64
+
+	// URL is the base URL of the Python inference service (e.g. http://localhost:8091).
+	// Empty means the in-process keyword stub is used.
+	URL string
+
+	// Timeout bounds a single HTTP classify call.
+	Timeout time.Duration
+
+	// MaxRetries is how many times a failed HTTP call is retried before giving
+	// up (or falling back to the stub when FallbackToStub is set).
+	MaxRetries int
+
+	// FallbackToStub uses the keyword stub after HTTP retries are exhausted so
+	// tickets are still analyzed when the model service is down.
+	FallbackToStub bool
 }
 
+// defaultDBPassword is the local-development database password baked into
+// docker-compose. Rejected outside development by Validate.
+const defaultDBPassword = "masterfabric"
+
 // Load reads configuration from environment variables with sensible defaults.
+//
+// Defaults target local development. Call Validate before serving traffic to
+// reject those defaults in any other environment.
 func Load() *Config {
 	return &Config{
+		Env: envOrDefault("APP_ENV", EnvDevelopment),
 		Server: ServerConfig{
 			Host:               envOrDefault("SERVER_HOST", "0.0.0.0"),
 			Port:               envOrDefaultInt("SERVER_PORT", 8080),
@@ -123,7 +202,7 @@ func Load() *Config {
 			Host:     envOrDefault("DB_HOST", "localhost"),
 			Port:     envOrDefaultInt("DB_PORT", 5432),
 			User:     envOrDefault("DB_USER", "masterfabric"),
-			Password: envOrDefault("DB_PASSWORD", "masterfabric"),
+			Password: envOrDefault("DB_PASSWORD", defaultDBPassword),
 			DBName:   envOrDefault("DB_NAME", "masterfabric"),
 			SSLMode:  envOrDefault("DB_SSLMODE", "disable"),
 			MaxConns: envOrDefaultInt32("DB_MAX_CONNS", 25),
@@ -136,7 +215,7 @@ func Load() *Config {
 			DB:       envOrDefaultInt("REDIS_DB", 0),
 		},
 		JWT: JWTConfig{
-			Secret:          envOrDefault("JWT_SECRET", "change-me-in-production"),
+			Secret:          envOrDefault("JWT_SECRET", InsecureJWTSecret),
 			ExpirationHours: envOrDefaultInt("JWT_EXPIRATION_HOURS", 24),
 			Issuer:          envOrDefault("JWT_ISSUER", "masterfabric"),
 		},
@@ -160,6 +239,10 @@ func Load() *Config {
 		},
 		Classifier: ClassifierConfig{
 			ReviewThreshold: envOrDefaultFloat("CLASSIFIER_REVIEW_THRESHOLD", 0.60),
+			URL:             envOrDefault("CLASSIFIER_URL", ""),
+			Timeout:         time.Duration(envOrDefaultInt("CLASSIFIER_TIMEOUT_MS", 5000)) * time.Millisecond,
+			MaxRetries:      envOrDefaultInt("CLASSIFIER_MAX_RETRIES", 2),
+			FallbackToStub:  envOrDefault("CLASSIFIER_FALLBACK_TO_STUB", "true") == "true",
 		},
 	}
 }

@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 )
 
 // StatsRepo implements repository.StatsRepository with PostgreSQL.

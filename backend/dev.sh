@@ -9,14 +9,18 @@
 #   - Ensures Kafka topics exist
 #   - Starts the Go server with hot-reload (air)
 #
+# The ML classifier (ml/) is a separate, opt-in service: it is the only container
+# that has to be built, so it is kept out of the default infra path.
+#
 # Usage:
-#   ./dev.sh          — Full startup (infra + migrations + hot-reload)
-#   ./dev.sh server   — Hot-reload server only (skip infra)
-#   ./dev.sh infra    — Start infra only (no server)
-#   ./dev.sh migrate  — Run migrations only
-#   ./dev.sh down     — Stop all Docker services
-#   ./dev.sh logs     — Tail Docker service logs
-#   ./dev.sh clean    — Stop infra, remove volumes, clean build artifacts
+#   ./dev.sh            — Full startup (infra + migrations + hot-reload)
+#   ./dev.sh server     — Hot-reload server only (skip infra)
+#   ./dev.sh infra      — Start infra only (no server, no classifier)
+#   ./dev.sh classifier — Build and start the ml/ model service
+#   ./dev.sh migrate    — Run migrations only
+#   ./dev.sh down       — Stop all Docker services
+#   ./dev.sh logs       — Tail Docker service logs
+#   ./dev.sh clean      — Stop infra, remove volumes, clean build artifacts
 #
 set -euo pipefail
 
@@ -24,9 +28,15 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$PROJECT_ROOT/deployments/docker-compose.yml"
 MIGRATION_DIR="$PROJECT_ROOT/internal/infrastructure/postgres/migrations"
+ML_DIR="$PROJECT_ROOT/ml"
 DB_USER="masterfabric"
 DB_NAME="masterfabric"
 DB_CONTAINER="masterfabric-postgres"
+
+# Datastores and the broker. The classifier is deliberately excluded: it is the
+# only service that needs a build, and a Python image build should never stand
+# between a developer and a running Postgres. Start it with ./dev.sh classifier.
+INFRA_SERVICES=(postgres redis kafka kafka-ui)
 
 # Build env — workaround for macOS sandbox permissions on /var/folders
 export GOTMPDIR="$PROJECT_ROOT/tmp"
@@ -105,7 +115,7 @@ start_infra() {
     check_docker
 
     log_info "Starting Docker Compose services..."
-    docker compose -f "$COMPOSE_FILE" up -d
+    docker compose -f "$COMPOSE_FILE" up -d "${INFRA_SERVICES[@]}"
 
     log_info "Waiting for services to become healthy..."
     local services=("masterfabric-postgres" "masterfabric-redis" "masterfabric-kafka")
@@ -137,6 +147,44 @@ stop_infra() {
     log_ok "All services stopped"
 }
 
+# ─── Classifier (ml/) ─────────────────────────────────────────────────────────
+
+start_classifier() {
+    log_step "Starting ML classifier"
+    check_docker
+
+    if [[ ! -f "$ML_DIR/Dockerfile" ]]; then
+        log_error "ml/Dockerfile not found at $ML_DIR"
+        exit 1
+    fi
+
+    log_info "Building and starting the classifier (first build downloads Python deps)..."
+    docker compose -f "$COMPOSE_FILE" up -d --build classifier
+
+    log_info "Waiting for the classifier to become healthy..."
+    local retries=30
+    for i in $(seq 1 $retries); do
+        local health
+        health=$(docker inspect --format='{{.State.Health.Status}}' ticketlens-classifier 2>/dev/null || echo "missing")
+        if [[ "$health" == "healthy" ]]; then
+            log_ok "ticketlens-classifier is healthy"
+            break
+        fi
+        if [[ $i -eq $retries ]]; then
+            log_warn "ticketlens-classifier did not become healthy (status: $health)"
+        fi
+        sleep 2
+    done
+
+    echo ""
+    log_ok "Classifier listening on ${BOLD}http://localhost:${CLASSIFIER_PORT:-8091}${NC}"
+    log_info "The server picks it up automatically; ./dev.sh server sets CLASSIFIER_URL."
+    if [[ ! -f "$ML_DIR/models/meta.json" ]]; then
+        log_warn "No trained checkpoint in ml/models — the service serves the keyword stub."
+    fi
+    echo ""
+}
+
 # ─── Migrations ───────────────────────────────────────────────────────────────
 
 run_migrations() {
@@ -163,6 +211,28 @@ run_migrations() {
 
 # ─── Server ───────────────────────────────────────────────────────────────────
 
+# wire_classifier points the Go backend at the local classifier container, but
+# only when that container is actually running. An unset CLASSIFIER_URL makes the
+# backend use the in-process keyword stub, which is the right default: pointing at
+# a dead port would make every ticket analysis wait out the HTTP timeout first.
+# An explicitly exported CLASSIFIER_URL always wins.
+wire_classifier() {
+    if [[ -n "${CLASSIFIER_URL:-}" ]]; then
+        log_info "CLASSIFIER_URL set by environment: $CLASSIFIER_URL"
+        return
+    fi
+
+    local running
+    running=$(docker inspect --format='{{.State.Running}}' ticketlens-classifier 2>/dev/null || echo "false")
+    if [[ "$running" == "true" ]]; then
+        export CLASSIFIER_URL="http://localhost:${CLASSIFIER_PORT:-8091}"
+        log_ok "Classifier detected — CLASSIFIER_URL=$CLASSIFIER_URL"
+    else
+        log_info "No classifier container running — using the built-in keyword stub."
+        log_info "Start the model service with ${BOLD}./dev.sh classifier${NC}"
+    fi
+}
+
 start_server() {
     log_step "Starting server with hot-reload"
 
@@ -171,6 +241,7 @@ start_server() {
     sleep 1
 
     install_air
+    wire_classifier
 
     log_info "Watching for file changes..."
     log_info "Server will be available at ${BOLD}http://localhost:8080${NC}"
@@ -205,6 +276,10 @@ cmd_infra() {
     log_ok "Infrastructure is ready. Run ${BOLD}./dev.sh server${NC} to start the app."
 }
 
+cmd_classifier() {
+    start_classifier
+}
+
 cmd_migrate() {
     run_migrations
 }
@@ -234,6 +309,7 @@ cmd_help() {
     echo -e "  ${GREEN}(default)${NC}   Full startup: infra + migrations + hot-reload server"
     echo -e "  ${GREEN}server${NC}      Start hot-reload server only (infra must be running)"
     echo -e "  ${GREEN}infra${NC}       Start infrastructure only (Postgres, Redis, Kafka)"
+    echo -e "  ${GREEN}classifier${NC}  Build and start the ml/ model service (opt-in)"
     echo -e "  ${GREEN}migrate${NC}     Run database migrations"
     echo -e "  ${GREEN}down${NC}        Stop all Docker services"
     echo -e "  ${GREEN}logs${NC}        Tail Docker service logs"
@@ -243,12 +319,14 @@ cmd_help() {
     echo "Environment:"
     echo "  KAFKA_ENABLED=true   (default: true)"
     echo "  DB_DSN=postgres://masterfabric:masterfabric@localhost:5432/masterfabric?sslmode=disable"
+    echo "  CLASSIFIER_URL       (auto-detected from the running container; unset = stub)"
     echo ""
     echo "Endpoints (when running):"
     echo "  API:        http://localhost:8080"
     echo "  Health:     http://localhost:8080/health/ready"
     echo "  Metrics:    http://localhost:8080/metrics"
     echo "  Kafka UI:   http://localhost:8090"
+    echo "  Classifier: http://localhost:8091  (./dev.sh classifier)"
 }
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -256,6 +334,7 @@ cmd_help() {
 case "${1:-}" in
     server)  cmd_server  ;;
     infra)   cmd_infra   ;;
+    classifier) cmd_classifier ;;
     migrate) cmd_migrate ;;
     down)    cmd_down    ;;
     logs)    cmd_logs    ;;

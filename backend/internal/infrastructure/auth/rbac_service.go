@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/iam/repository"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
 	"github.com/redis/go-redis/v9"
 )
 

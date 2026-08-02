@@ -1,5 +1,14 @@
-# Binaries
-bin/
+# Go backend ignores.
+#
+# NOTE ON ANCHORING: this file also governs backend/ml (the Python workspace),
+# because gitignore rules apply to every subdirectory. Rules that describe *this
+# module's* build output are therefore anchored with a leading slash, so they
+# match only at backend/ and cannot silently swallow an ml/ file that happens to
+# share a name. Rules that should apply everywhere (secrets, OS noise) stay
+# unanchored on purpose. ml/ has its own .gitignore for its own artefacts.
+
+# Binaries — /bin is this module's build output; an ml/bin/ would be unrelated.
+/bin/
 *.exe
 *.exe~
 *.dll
@@ -9,9 +18,10 @@ bin/
 # Test binary
 *.test
 
-# Output of go coverage
-*.out
-coverage.html
+# Go coverage output. Anchored: an unanchored *.out would also hide evaluation
+# reports written under ml/data, which are worth reviewing in a diff.
+/coverage.out
+/coverage.html
 
 # Go workspace
 go.work
@@ -28,18 +38,20 @@ go.work.sum
 .DS_Store
 Thumbs.db
 
-# Environment
+# Environment — unanchored on purpose: a stray .env must never be committed,
+# wherever it appears. The checked-in template is the documented exception.
 .env
 .env.local
 .env.*.local
+!.env.example
 
 # Vendor (optional)
 # vendor/
 
-# Build output
-dist/
-tmp/
-.tmp/
+# Build output — anchored; ml/ declares its own dist/ and build/ rules.
+/dist/
+/tmp/
+/.tmp/
 
 # Air hot-reload
-bin/air
+/bin/air

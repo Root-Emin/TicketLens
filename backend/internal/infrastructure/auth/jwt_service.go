@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/iam/service"
+	"github.com/Root-Emin/TicketLens/internal/shared/config"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/iam/service"
-	"github.com/masterfabric-go/masterfabric/internal/shared/config"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 	"golang.org/x/crypto/bcrypt"
 )
 

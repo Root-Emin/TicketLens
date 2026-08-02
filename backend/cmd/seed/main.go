@@ -21,31 +21,31 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	iamModel "github.com/masterfabric-go/masterfabric/internal/domain/iam/model"
-	triageModel "github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
+	iamModel "github.com/Root-Emin/TicketLens/internal/domain/iam/model"
+	triageModel "github.com/Root-Emin/TicketLens/internal/domain/triage/model"
 
-	iamDTO "github.com/masterfabric-go/masterfabric/internal/application/iam/dto"
-	iamUC "github.com/masterfabric-go/masterfabric/internal/application/iam/usecase"
-	tenantDTO "github.com/masterfabric-go/masterfabric/internal/application/tenant/dto"
-	tenantUC "github.com/masterfabric-go/masterfabric/internal/application/tenant/usecase"
-	triageDTO "github.com/masterfabric-go/masterfabric/internal/application/triage/dto"
-	triageUC "github.com/masterfabric-go/masterfabric/internal/application/triage/usecase"
+	iamDTO "github.com/Root-Emin/TicketLens/internal/application/iam/dto"
+	iamUC "github.com/Root-Emin/TicketLens/internal/application/iam/usecase"
+	tenantDTO "github.com/Root-Emin/TicketLens/internal/application/tenant/dto"
+	tenantUC "github.com/Root-Emin/TicketLens/internal/application/tenant/usecase"
+	triageDTO "github.com/Root-Emin/TicketLens/internal/application/triage/dto"
+	triageUC "github.com/Root-Emin/TicketLens/internal/application/triage/usecase"
 
-	infraAuth "github.com/masterfabric-go/masterfabric/internal/infrastructure/auth"
-	stubClassifier "github.com/masterfabric-go/masterfabric/internal/infrastructure/classifier/stub"
-	pgAudit "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/audit"
-	pgIam "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/iam"
-	pgTenant "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/tenant"
-	pgTriage "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/triage"
+	infraAuth "github.com/Root-Emin/TicketLens/internal/infrastructure/auth"
+	stubClassifier "github.com/Root-Emin/TicketLens/internal/infrastructure/classifier/stub"
+	pgAudit "github.com/Root-Emin/TicketLens/internal/infrastructure/postgres/audit"
+	pgIam "github.com/Root-Emin/TicketLens/internal/infrastructure/postgres/iam"
+	pgTenant "github.com/Root-Emin/TicketLens/internal/infrastructure/postgres/tenant"
+	pgTriage "github.com/Root-Emin/TicketLens/internal/infrastructure/postgres/triage"
 
-	"github.com/masterfabric-go/masterfabric/internal/shared/config"
-	"github.com/masterfabric-go/masterfabric/internal/shared/database"
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
-	"github.com/masterfabric-go/masterfabric/internal/shared/middleware"
+	"github.com/Root-Emin/TicketLens/internal/shared/config"
+	"github.com/Root-Emin/TicketLens/internal/shared/database"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
+	"github.com/Root-Emin/TicketLens/internal/shared/middleware"
 )
 
 const (
-	demoOrgName   = "Demo Yazılım A.Ş."
+	demoOrgName   = "Demo Software Inc."
 	demoOrgSlug   = "demo"
 	demoUserEmail = "demo@ticketlens.dev"
 	demoPassword  = "Demo1234!"
@@ -88,7 +88,7 @@ func run() error {
 
 	rng := rand.New(rand.NewSource(seedRandSeed)) // #nosec G404 -- reproducibility, not security
 
-	fmt.Println("🌱 TicketLens demo verisi hazırlanıyor...")
+	fmt.Println("🌱 Preparing TicketLens demo data...")
 
 	// --- Repositories & services -------------------------------------------
 	userRepo := pgIam.NewUserRepo(db)
@@ -108,12 +108,13 @@ func run() error {
 	createOrgUC := tenantUC.NewCreateOrgUseCase(orgRepo, roleRepo, departmentRepo, bus)
 	createDepartmentUC := triageUC.NewCreateDepartmentUseCase(departmentRepo)
 	createCustomerUC := triageUC.NewCreateCustomerUseCase(customerRepo)
+	txManager := database.NewTxManager(db)
 	createTicketUC := triageUC.NewCreateTicketUseCase(
-		ticketRepo, messageRepo, customerRepo, departmentRepo, analysisRepo, userRepo, bus)
+		ticketRepo, messageRepo, customerRepo, departmentRepo, analysisRepo, userRepo, txManager, bus)
 	createMessageUC := triageUC.NewCreateMessageUseCase(ticketRepo, messageRepo)
 	analyzeUC := triageUC.NewAnalyzeTicketUseCase(
 		ticketRepo, messageRepo, departmentRepo, customerRepo, analysisRepo, userRepo,
-		stubClassifier.New(), cfg.Classifier.ReviewThreshold)
+		stubClassifier.New(), cfg.Classifier.ReviewThreshold, bus)
 	updateTicketUC := triageUC.NewUpdateTicketUseCase(
 		ticketRepo, analysisRepo, departmentRepo, customerRepo, messageRepo, userRepo, auditRepo, bus)
 
@@ -128,7 +129,7 @@ func run() error {
 		return err
 	}
 	if removed {
-		fmt.Println("  ↺ önceki demo organizasyonu temizlendi")
+		fmt.Println("  ↺ previous demo organization cleaned up")
 	}
 
 	// --- 3. Demo admin ------------------------------------------------------
@@ -149,7 +150,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create demo organization: %w", err)
 	}
-	fmt.Printf("  ✓ organizasyon: %s (%s)\n", org.Name, org.ID)
+	fmt.Printf("  ✓ organization: %s (%s)\n", org.Name, org.ID)
 
 	// --- 5. Departments -----------------------------------------------------
 	// Deliberately fewer departments than the taxonomy has categories: six
@@ -159,10 +160,10 @@ func run() error {
 		name     string
 		category string
 	}{
-		{"Teknik Destek", string(triageModel.CategoryTechnicalIssue)},
-		{"Entegrasyon Destek", string(triageModel.CategoryIntegration)},
-		{"Ödeme Operasyon", string(triageModel.CategoryPaymentOps)},
-		{"Müşteri Başarısı", string(triageModel.CategoryHowTo)},
+		{"Technical Support", string(triageModel.CategoryTechnicalIssue)},
+		{"Integration Support", string(triageModel.CategoryIntegration)},
+		{"Payment Operations", string(triageModel.CategoryPaymentOps)},
+		{"Customer Success", string(triageModel.CategoryHowTo)},
 	}
 	for _, d := range extraDepartments {
 		category := d.category
@@ -173,7 +174,7 @@ func run() error {
 			return fmt.Errorf("create department %s: %w", d.name, err)
 		}
 	}
-	fmt.Printf("  ✓ departman: 1 varsayılan + %d kategorili\n", len(extraDepartments))
+	fmt.Printf("  ✓ departments: 1 default + %d categorized\n", len(extraDepartments))
 
 	departments, err := departmentRepo.ListByOrg(ctx, org.ID)
 	if err != nil {
@@ -193,7 +194,7 @@ func run() error {
 		}
 		customerIDs = append(customerIDs, created.ID)
 	}
-	fmt.Printf("  ✓ müşteri: %d\n", len(customerIDs))
+	fmt.Printf("  ✓ customers: %d\n", len(customerIDs))
 
 	// --- 7. Tickets, analyses, threads --------------------------------------
 	seeded, err := seedTickets(ctx, seedDeps{
@@ -213,17 +214,17 @@ func run() error {
 		return err
 	}
 
-	fmt.Printf("  ✓ ticket: %d (analiz: %d, eşlenemeyen: %d)\n",
+	fmt.Printf("  ✓ tickets: %d (analyzed: %d, unmapped: %d)\n",
 		seeded.total, seeded.analyzed, seeded.unmapped)
-	fmt.Printf("  ✓ override: %d öncelik, %d departman\n",
+	fmt.Printf("  ✓ overrides: %d priority, %d department\n",
 		seeded.priorityOverrides, seeded.departmentOverrides)
-	fmt.Printf("  ✓ mesaj: %d\n", seeded.messages)
+	fmt.Printf("  ✓ messages: %d\n", seeded.messages)
 
 	fmt.Println()
-	fmt.Println("✅ Hazır. Demo girişi:")
-	fmt.Printf("   e-posta : %s\n", demoUserEmail)
-	fmt.Printf("   şifre   : %s\n", demoPassword)
-	fmt.Printf("   org     : %s (slug: %s)\n", org.Name, demoOrgSlug)
+	fmt.Println("✅ Ready. Demo login:")
+	fmt.Printf("   email    : %s\n", demoUserEmail)
+	fmt.Printf("   password : %s\n", demoPassword)
+	fmt.Printf("   org      : %s (slug: %s)\n", org.Name, demoOrgSlug)
 	return nil
 }
 
@@ -303,7 +304,7 @@ func ensureDemoUser(ctx context.Context, userRepo *pgIam.UserRepo, registerUC *i
 		Email:     demoUserEmail,
 		Password:  demoPassword,
 		FirstName: "Demo",
-		LastName:  "Yönetici",
+		LastName:  "Admin",
 	})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("create demo user: %w", err)

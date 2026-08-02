@@ -2,19 +2,21 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/apimanagement/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/apimanagement/repository"
+	gatewayDomain "github.com/Root-Emin/TicketLens/internal/domain/gateway"
+	iamService "github.com/Root-Emin/TicketLens/internal/domain/iam/service"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
+	"github.com/Root-Emin/TicketLens/internal/shared/middleware"
+	"github.com/Root-Emin/TicketLens/internal/shared/response"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/repository"
-	gatewayDomain "github.com/masterfabric-go/masterfabric/internal/domain/gateway"
-	iamService "github.com/masterfabric-go/masterfabric/internal/domain/iam/service"
-	"github.com/masterfabric-go/masterfabric/internal/shared/middleware"
-	"github.com/masterfabric-go/masterfabric/internal/shared/response"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -111,8 +113,15 @@ func (p *Pipeline) Enforce(next http.Handler) http.Handler {
 			return
 		}
 
-		// 3. Fetch endpoint policy
-		policy, _ := p.policyRepo.GetByEndpointID(ctx, endpoint.ID)
+		// 3. Fetch endpoint policy. A lookup failure other than not-found is a
+		// real infrastructure problem; treating it as "no policy" would skip
+		// permission and rate-limit checks for a managed endpoint.
+		policy, err := p.policyRepo.GetByEndpointID(ctx, endpoint.ID)
+		if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+			p.logger.Error("policy lookup failed", "error", err, "endpoint_id", endpoint.ID)
+			response.JSON(w, http.StatusInternalServerError, map[string]string{"error": "policy lookup failed"})
+			return
+		}
 
 		// 4. Permission enforcement
 		if policy != nil && policy.RequiredPermission != "" {
@@ -220,8 +229,8 @@ func (p *Pipeline) Enforce(next http.Handler) http.Handler {
 // responseWriter wraps http.ResponseWriter to capture response for interceptors.
 type responseWriter struct {
 	http.ResponseWriter
-	statusCode int
-	header     http.Header
+	statusCode  int
+	header      http.Header
 	wroteHeader bool
 }
 

@@ -5,11 +5,11 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/iam/model"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/masterfabric-go/masterfabric/internal/domain/iam/model"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 )
 
 // UserRepo implements repository.UserRepository with PostgreSQL.
@@ -111,6 +111,47 @@ func (r *UserRepo) List(ctx context.Context, offset, limit int) ([]*model.User, 
 	for rows.Next() {
 		var u model.User
 		if err := rows.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.FirstName, &u.LastName, &u.Status, &u.CreatedAt, &u.UpdatedAt); err != nil {
+			return nil, 0, domainErr.New(domainErr.ErrInternal, "failed to scan user", err)
+		}
+		users = append(users, &u)
+	}
+	return users, total, nil
+}
+
+// ListByOrganization returns members of one organization.
+//
+// Membership comes from user_roles, the table CreateOrgUseCase writes to. A user
+// may hold several roles in the same organization, hence DISTINCT.
+func (r *UserRepo) ListByOrganization(ctx context.Context, orgID uuid.UUID, offset, limit int) ([]*model.User, int, error) {
+	var total int
+	err := r.db.QueryRow(ctx,
+		`SELECT COUNT(DISTINCT ur.user_id) FROM user_roles ur WHERE ur.organization_id = $1`,
+		orgID,
+	).Scan(&total)
+	if err != nil {
+		return nil, 0, domainErr.New(domainErr.ErrInternal, "failed to count organization users", err)
+	}
+
+	rows, err := r.db.Query(ctx,
+		`SELECT DISTINCT u.id, u.email, u.password_hash, u.first_name, u.last_name,
+		        u.status, u.created_at, u.updated_at
+		 FROM users u
+		 JOIN user_roles ur ON ur.user_id = u.id
+		 WHERE ur.organization_id = $1
+		 ORDER BY u.created_at DESC
+		 LIMIT $2 OFFSET $3`,
+		orgID, limit, offset,
+	)
+	if err != nil {
+		return nil, 0, domainErr.New(domainErr.ErrInternal, "failed to list organization users", err)
+	}
+	defer rows.Close()
+
+	var users []*model.User
+	for rows.Next() {
+		var u model.User
+		if err := rows.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.FirstName, &u.LastName,
+			&u.Status, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, 0, domainErr.New(domainErr.ErrInternal, "failed to scan user", err)
 		}
 		users = append(users, &u)

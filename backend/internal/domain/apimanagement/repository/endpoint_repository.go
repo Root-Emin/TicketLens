@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/apimanagement/model"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/model"
 )
 
 // EndpointRepository defines the interface for endpoint persistence.

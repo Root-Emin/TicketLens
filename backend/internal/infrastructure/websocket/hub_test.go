@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	realtimeService "github.com/Root-Emin/TicketLens/internal/domain/realtime/service"
 	"github.com/google/uuid"
-	realtimeService "github.com/masterfabric-go/masterfabric/internal/domain/realtime/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

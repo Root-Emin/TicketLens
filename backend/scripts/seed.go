@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/masterfabric-go/masterfabric/internal/shared/config"
-	"github.com/masterfabric-go/masterfabric/internal/shared/database"
+	"github.com/Root-Emin/TicketLens/internal/shared/config"
+	"github.com/Root-Emin/TicketLens/internal/shared/database"
 )
 
 func main() {

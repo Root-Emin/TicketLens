@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	iamService "github.com/Root-Emin/TicketLens/internal/domain/iam/service"
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/google/uuid"
-	iamService "github.com/masterfabric-go/masterfabric/internal/domain/iam/service"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 )
 
 // ConnectInput holds validated connection parameters.

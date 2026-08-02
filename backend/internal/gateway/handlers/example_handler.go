@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/apimanagement/model"
 )
 
 // ExampleProductHandler demonstrates how to implement a backend handler.
@@ -61,7 +61,7 @@ func (h *ExampleProductHandler) handleList(ctx context.Context, endpoint *model.
 	}
 
 	body, _ := json.Marshal(map[string]interface{}{
-		"data": products,
+		"data":  products,
 		"count": len(products),
 	})
 

@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"log/slog"
 
+	apimgmtEvent "github.com/Root-Emin/TicketLens/internal/domain/apimanagement/event"
+	iamEvent "github.com/Root-Emin/TicketLens/internal/domain/iam/event"
+	"github.com/Root-Emin/TicketLens/internal/domain/realtime/model"
+	tenantEvent "github.com/Root-Emin/TicketLens/internal/domain/tenant/event"
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/repository"
+	triageEvent "github.com/Root-Emin/TicketLens/internal/domain/triage/event"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
 	"github.com/google/uuid"
-	apimgmtEvent "github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/event"
-	iamEvent "github.com/masterfabric-go/masterfabric/internal/domain/iam/event"
-	"github.com/masterfabric-go/masterfabric/internal/domain/realtime/model"
-	tenantEvent "github.com/masterfabric-go/masterfabric/internal/domain/tenant/event"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/repository"
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
 )
 
 // EventBridge fans out domain events from the event bus to WebSocket rooms.
@@ -31,6 +32,7 @@ func (b *EventBridge) Register(bus events.EventBus) {
 	bus.Subscribe(events.TopicIAM, b.handleEvent(events.TopicIAM, "iam"))
 	bus.Subscribe(events.TopicTenant, b.handleEvent(events.TopicTenant, "tenant"))
 	bus.Subscribe(events.TopicAPIManagement, b.handleEvent(events.TopicAPIManagement, "api-management"))
+	bus.Subscribe(events.TopicTriage, b.handleEvent(events.TopicTriage, "triage"))
 }
 
 func (b *EventBridge) handleEvent(topic, channel string) events.Handler {
@@ -159,6 +161,30 @@ func extractRoutes(event events.Event) []eventRoute {
 			orgID:     uuid.Nil,
 			appID:     e.AppID,
 			eventType: "endpoint.activated",
+		}}
+	case triageEvent.TicketCreated:
+		return []eventRoute{{
+			orgID:     e.OrganizationID,
+			appID:     uuid.Nil,
+			eventType: events.EventTypeTicketCreated,
+		}}
+	case triageEvent.TicketUpdated:
+		return []eventRoute{{
+			orgID:     e.OrganizationID,
+			appID:     uuid.Nil,
+			eventType: events.EventTypeTicketUpdated,
+		}}
+	case triageEvent.TicketAssigned:
+		return []eventRoute{{
+			orgID:     e.OrganizationID,
+			appID:     uuid.Nil,
+			eventType: events.EventTypeTicketAssigned,
+		}}
+	case triageEvent.AnalysisCompleted:
+		return []eventRoute{{
+			orgID:     e.OrganizationID,
+			appID:     uuid.Nil,
+			eventType: events.EventTypeAnalysisCompleted,
 		}}
 	default:
 		return nil

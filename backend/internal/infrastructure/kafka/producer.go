@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	kafkago "github.com/segmentio/kafka-go"
 
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
 )
 
 // Producer wraps a kafka-go Writer to publish domain events.

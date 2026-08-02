@@ -14,43 +14,46 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	// Infrastructure
-	infraAuth "github.com/masterfabric-go/masterfabric/internal/infrastructure/auth"
-	stubClassifier "github.com/masterfabric-go/masterfabric/internal/infrastructure/classifier/stub"
-	infraTriage "github.com/masterfabric-go/masterfabric/internal/infrastructure/triage"
-	apimgmtHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/apimanagement"
-	auditHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/audit"
-	iamHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/iam"
-	realtimeHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/realtime"
-	tenantHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/tenant"
-	"github.com/masterfabric-go/masterfabric/internal/infrastructure/http/router"
-	infraKafka "github.com/masterfabric-go/masterfabric/internal/infrastructure/kafka"
-	infraWS "github.com/masterfabric-go/masterfabric/internal/infrastructure/websocket"
-	pgApimgmt "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/apimanagement"
-	pgAudit "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/audit"
-	pgIam "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/iam"
-	pgTenant "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/tenant"
-	pgTriage "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/triage"
-	triageHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/triage"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/port"
+	infraAuth "github.com/Root-Emin/TicketLens/internal/infrastructure/auth"
+	httpClassifier "github.com/Root-Emin/TicketLens/internal/infrastructure/classifier/http"
+	stubClassifier "github.com/Root-Emin/TicketLens/internal/infrastructure/classifier/stub"
+	apimgmtHandler "github.com/Root-Emin/TicketLens/internal/infrastructure/http/handler/apimanagement"
+	auditHandler "github.com/Root-Emin/TicketLens/internal/infrastructure/http/handler/audit"
+	iamHandler "github.com/Root-Emin/TicketLens/internal/infrastructure/http/handler/iam"
+	realtimeHandler "github.com/Root-Emin/TicketLens/internal/infrastructure/http/handler/realtime"
+	tenantHandler "github.com/Root-Emin/TicketLens/internal/infrastructure/http/handler/tenant"
+	triageHandler "github.com/Root-Emin/TicketLens/internal/infrastructure/http/handler/triage"
+	"github.com/Root-Emin/TicketLens/internal/infrastructure/http/router"
+	infraKafka "github.com/Root-Emin/TicketLens/internal/infrastructure/kafka"
+	"github.com/Root-Emin/TicketLens/internal/infrastructure/postgres"
+	pgApimgmt "github.com/Root-Emin/TicketLens/internal/infrastructure/postgres/apimanagement"
+	pgAudit "github.com/Root-Emin/TicketLens/internal/infrastructure/postgres/audit"
+	pgIam "github.com/Root-Emin/TicketLens/internal/infrastructure/postgres/iam"
+	pgTenant "github.com/Root-Emin/TicketLens/internal/infrastructure/postgres/tenant"
+	pgTriage "github.com/Root-Emin/TicketLens/internal/infrastructure/postgres/triage"
+	infraTriage "github.com/Root-Emin/TicketLens/internal/infrastructure/triage"
+	infraWS "github.com/Root-Emin/TicketLens/internal/infrastructure/websocket"
 
 	// Application use cases
-	apimgmtUC "github.com/masterfabric-go/masterfabric/internal/application/apimanagement/usecase"
-	iamUC "github.com/masterfabric-go/masterfabric/internal/application/iam/usecase"
-	realtimeUC "github.com/masterfabric-go/masterfabric/internal/application/realtime/usecase"
-	tenantUC "github.com/masterfabric-go/masterfabric/internal/application/tenant/usecase"
-	triageUC "github.com/masterfabric-go/masterfabric/internal/application/triage/usecase"
+	apimgmtUC "github.com/Root-Emin/TicketLens/internal/application/apimanagement/usecase"
+	iamUC "github.com/Root-Emin/TicketLens/internal/application/iam/usecase"
+	realtimeUC "github.com/Root-Emin/TicketLens/internal/application/realtime/usecase"
+	tenantUC "github.com/Root-Emin/TicketLens/internal/application/tenant/usecase"
+	triageUC "github.com/Root-Emin/TicketLens/internal/application/triage/usecase"
 
 	// Gateway
-	"github.com/masterfabric-go/masterfabric/internal/gateway"
-	gatewayInterceptors "github.com/masterfabric-go/masterfabric/internal/infrastructure/gateway/interceptors"
+	"github.com/Root-Emin/TicketLens/internal/gateway"
+	gatewayInterceptors "github.com/Root-Emin/TicketLens/internal/infrastructure/gateway/interceptors"
 
 	// Shared
-	"github.com/masterfabric-go/masterfabric/internal/shared/cache"
-	"github.com/masterfabric-go/masterfabric/internal/shared/config"
-	"github.com/masterfabric-go/masterfabric/internal/shared/database"
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
-	"github.com/masterfabric-go/masterfabric/internal/shared/logger"
-	"github.com/masterfabric-go/masterfabric/internal/shared/telemetry"
-	"github.com/masterfabric-go/masterfabric/internal/shared/version"
+	"github.com/Root-Emin/TicketLens/internal/shared/cache"
+	"github.com/Root-Emin/TicketLens/internal/shared/config"
+	"github.com/Root-Emin/TicketLens/internal/shared/database"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
+	"github.com/Root-Emin/TicketLens/internal/shared/logger"
+	"github.com/Root-Emin/TicketLens/internal/shared/telemetry"
+	"github.com/Root-Emin/TicketLens/internal/shared/version"
 )
 
 func main() {
@@ -68,13 +71,22 @@ func run() error {
 	log := logger.New(cfg.Log.Level, cfg.Log.Format)
 	slog.SetDefault(log)
 
-	log.Info("starting masterfabric-go",
+	log.Info("starting ticketlens",
 		"host", cfg.Server.Host,
 		"port", cfg.Server.Port,
+		"env", cfg.Env,
 	)
 
-	if cfg.JWT.Secret == "change-me-in-production" {
-		log.Warn("JWT_SECRET is unset; authentication uses a known default value")
+	// Refuse to serve traffic with development defaults outside development.
+	// Returning here aborts startup: a deployment signing tokens with a public
+	// secret is worse than a deployment that does not start.
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	if cfg.JWT.Secret == config.InsecureJWTSecret {
+		log.Warn("JWT_SECRET is unset; authentication uses a known default value",
+			"env", cfg.Env)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -97,6 +109,11 @@ func run() error {
 	} else {
 		defer db.Close()
 		log.Info("connected to postgres")
+		// Apply pending migrations so a fresh checkout does not require a
+		// separate make migrate / start.sh infra step before serving.
+		if migErr := postgres.MigrateUp(ctx, db, log); migErr != nil {
+			return fmt.Errorf("run migrations: %w", migErr)
+		}
 	}
 
 	// Initialize Redis
@@ -238,6 +255,7 @@ func buildDependencies(
 	ticketMessageRepo := pgTriage.NewTicketMessageRepo(db)
 	aiAnalysisRepo := pgTriage.NewAIAnalysisRepo(db)
 	statsRepo := pgTriage.NewStatsRepo(db)
+	txManager := database.NewTxManager(db)
 
 	// --- Services ---
 	jwtService := infraAuth.NewJWTService(cfg.JWT)
@@ -247,6 +265,14 @@ func buildDependencies(
 	deps.RBACService = rbacService
 	deps.OrgRepo = orgRepo
 	deps.WorkspaceRepo = workspaceRepo
+	// Needed by the path-scope guards: an addressed app or user must belong to
+	// the caller's organization before any handler resolves it by id.
+	deps.AppRepo = appRepo
+	deps.RoleRepo = roleRepo
+	// Child ids in a path must be confirmed against their parent: an api key or
+	// endpoint id is otherwise usable with any app id the caller owns.
+	deps.APIKeyRepo = apiKeyRepo
+	deps.EndpointRepo = endpointRepo
 
 	// --- Use cases (with event bus for domain event publishing) ---
 	registerUC := iamUC.NewRegisterUseCase(userRepo, jwtService, eventBus)
@@ -296,12 +322,12 @@ func buildDependencies(
 	deps.AuditHandler = auditHandler.NewHandler(auditRepo)
 
 	// --- Triage (ticketing) ---
-	// The stub classifier keeps the backend fully functional without the model
-	// service; an HTTP adapter will replace it behind the same port.
-	ticketClassifier := stubClassifier.New()
+	// CLASSIFIER_URL selects the Python inference service; empty keeps the
+	// in-process keyword stub so local demos work with no extra container.
+	ticketClassifier := newClassifier(cfg, log)
 	analyzeTicketUC := triageUC.NewAnalyzeTicketUseCase(
 		ticketRepo, ticketMessageRepo, departmentRepo, customerRepo, aiAnalysisRepo, userRepo,
-		ticketClassifier, cfg.Classifier.ReviewThreshold,
+		ticketClassifier, cfg.Classifier.ReviewThreshold, eventBus,
 	)
 
 	deps.TriageHandler = triageHandler.NewHandler(triageHandler.Config{
@@ -316,7 +342,7 @@ func buildDependencies(
 			customerRepo, ticketRepo, departmentRepo, ticketMessageRepo, aiAnalysisRepo, userRepo),
 
 		CreateTicket: triageUC.NewCreateTicketUseCase(
-			ticketRepo, ticketMessageRepo, customerRepo, departmentRepo, aiAnalysisRepo, userRepo, eventBus),
+			ticketRepo, ticketMessageRepo, customerRepo, departmentRepo, aiAnalysisRepo, userRepo, txManager, eventBus),
 		ListTickets: triageUC.NewListTicketsUseCase(
 			ticketRepo, departmentRepo, customerRepo, ticketMessageRepo, aiAnalysisRepo, userRepo),
 		GetTicket: triageUC.NewGetTicketUseCase(
@@ -332,6 +358,8 @@ func buildDependencies(
 		AnalyzeTicket: analyzeTicketUC,
 
 		StatsOverview: triageUC.NewStatsOverviewUseCase(statsRepo),
+
+		ReviewThreshold: cfg.Classifier.ReviewThreshold,
 	})
 
 	// Classify newly created tickets off the event bus. The consumer is
@@ -374,14 +402,14 @@ func buildDependencies(
 	// 3. Generic dynamic database handler (automatically performs CRUD operations)
 	backendRegistry := gateway.NewBackendRegistry()
 	dynamicResolver := gateway.NewDynamicHandlerResolver(backendRegistry, log, db)
-	
+
 	// Optional: Register service configurations for HTTP proxying
 	// Example:
 	// dynamicResolver.RegisterServiceConfig("product-service", gateway.ServiceConfig{
 	//     BaseURL: "https://api.example.com/products",
 	//     Headers: map[string]string{"Authorization": "Bearer token"},
 	// })
-	
+
 	// Optional: Register specific handlers for services that need custom logic
 	// Example:
 	// productHandler := handlers.NewProductHandler(...)
@@ -396,8 +424,29 @@ func buildDependencies(
 		log,
 		dynamicResolver, // Dynamic handler resolver (supports registered handlers, HTTP proxy, and generic handling)
 		schemaValidator, // Schema validation interceptor
-		piiMasker,      // PII masking interceptor
+		piiMasker,       // PII masking interceptor
 	)
 
 	return deps
+}
+
+// newClassifier picks the HTTP model service when CLASSIFIER_URL is set,
+// otherwise the deterministic keyword stub.
+func newClassifier(cfg *config.Config, log *slog.Logger) port.Classifier {
+	if cfg.Classifier.URL == "" {
+		log.Info("classifier: using in-process stub")
+		return stubClassifier.New()
+	}
+	log.Info("classifier: using HTTP adapter",
+		"url", cfg.Classifier.URL,
+		"timeout", cfg.Classifier.Timeout,
+		"max_retries", cfg.Classifier.MaxRetries,
+		"fallback_to_stub", cfg.Classifier.FallbackToStub,
+	)
+	return httpClassifier.New(httpClassifier.Config{
+		URL:            cfg.Classifier.URL,
+		Timeout:        cfg.Classifier.Timeout,
+		MaxRetries:     cfg.Classifier.MaxRetries,
+		FallbackToStub: cfg.Classifier.FallbackToStub,
+	}, log)
 }

@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ticketlens-ml"
+version = "0.1.0"
+description = "TicketLens multi-task ticket classifier: data generation, training, calibration, inference"
+readme = "README.md"
+# Pinned to the runtime image (Dockerfile: python:3.12-slim). The previous
+# ">=3.9" let a venv built on macOS' system Python satisfy the constraint, so
+# local runs and the container silently disagreed on the interpreter.
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "pydantic>=2.9",
+  "numpy>=1.26",
+  "pandas>=2.2",
+  "pyarrow>=14",
+  "scikit-learn>=1.5",
+  "httpx>=0.27",
+  "datasets>=3.0",
+  "typer>=0.12",
+  "rich>=13.0",
+]
+
+[project.optional-dependencies]
+train = [
+  "torch>=2.2",
+  "transformers>=4.45",
+  "accelerate>=0.34",
+  "sentencepiece>=0.2",
+]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6",
+]
+
+[project.scripts]
+ticketlens-ml = "ticketlens_ml.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/F are ruff's default; the rest catch the drift this codebase actually risks.
+select = ["E", "F", "I", "B", "UP", "FURB"]
+# Line length is a formatter's decision and no formatter is wired up here, so
+# E501 would only flag ~80 pre-existing lines without improving anything. Drop
+# the rule rather than reflow the file and lose the diff history.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Typer's entire API is `def cmd(x: int = typer.Option(...))`. B008 flags calls
+# in argument defaults, which is exactly how a Typer CLI is declared — following
+# it here would mean rewriting every command signature to work around the
+# framework. Scoped to the CLI so the rule keeps protecting the rest.
+"src/ticketlens_ml/cli.py" = ["B008"]

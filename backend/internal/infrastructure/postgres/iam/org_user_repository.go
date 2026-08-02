@@ -5,11 +5,11 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/iam/model"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/masterfabric-go/masterfabric/internal/domain/iam/model"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 )
 
 // OrgUserRepo implements repository.OrgUserRepository with PostgreSQL.

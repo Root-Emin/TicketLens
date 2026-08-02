@@ -5,8 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
+	tenantRepo "github.com/Root-Emin/TicketLens/internal/domain/tenant/repository"
 	"github.com/google/uuid"
-	tenantRepo "github.com/masterfabric-go/masterfabric/internal/domain/tenant/repository"
 )
 
 // Resolver resolves tenant, app, and endpoint context from request metadata.

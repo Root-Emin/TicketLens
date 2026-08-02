@@ -1,0 +1,38 @@
+# Build context for ml/Dockerfile (context = backend/ml).
+#
+# The Dockerfile only needs pyproject.toml, README.md and src/. Everything below
+# is either rebuilt inside the image or mounted at runtime, and .venv alone is
+# ~390 MB of host-specific binaries that would be useless in a Linux image.
+
+# Local virtualenv — platform-specific, reinstalled by pip in the image.
+.venv/
+
+# Trained checkpoints and calibration are mounted at /models by compose, not
+# baked in: the image stays small and a new model does not mean a new build.
+models/
+
+# Generated corpora, splits and eval fixtures are training-time inputs. Inference
+# never reads them.
+data/
+
+# Notebooks are exploration, not runtime.
+notebooks/
+
+# Python build and test artefacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Tests are run by `make ml-test` on the host, not inside the runtime image.
+tests/
+
+# Environment
+.env
+.env.local
+
+# OS noise
+.DS_Store

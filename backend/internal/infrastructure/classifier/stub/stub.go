@@ -13,8 +13,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/port"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/port"
 )
 
 const (
@@ -27,6 +27,10 @@ const (
 	minConfidence  = 0.50
 	maxConfidence  = 0.95
 	confidenceStep = 0.15
+
+	// subjectWeight makes a signal in the subject count for more than the same
+	// signal buried in a long body, where an incidental mention is likelier.
+	subjectWeight = 2
 )
 
 // Classifier is a keyword-matching implementation of port.Classifier.
@@ -39,99 +43,89 @@ func New() *Classifier { return &Classifier{} }
 var _ port.Classifier = (*Classifier)(nil)
 
 // categoryKeywords maps each taxonomy label to the terms that signal it.
-// Turkish and English terms sit side by side because real tickets mix both.
 // Order matters only for tie-breaking, which is resolved deterministically by
 // the fixed order of model.AllCategories.
 var categoryKeywords = map[model.Category][]string{
 	model.CategoryIntegration: {
-		"entegrasyon", "integration", "trendyol", "hepsiburada", "n11", "pazaryeri",
-		"marketplace", "kargo", "cargo", "erp", "logo", "mikro", "netsis", "muhasebe",
-		"api", "sdk", "webhook", "senkron", "aktarm", "aktarmıyor", "sanal pos",
+		"integration", "integrations", "trendyol", "hepsiburada", "n11", "marketplace",
+		"cargo", "shipping", "erp", "logo", "mikro", "netsis", "connector",
+		"api", "sdk", "webhook", "sync", "synchronization", "not transferring", "virtual pos",
 	},
 	model.CategoryPaymentOps: {
-		"hakediş", "hakedis", "settlement", "mutabakat", "iade", "refund",
-		"chargeback", "ters ibraz", "para", "ödeme alamıyorum", "odeme alamiyorum",
-		"işlem eksik", "islem eksik", "hesabıma geçmedi", "hesabima gecmedi", "payout",
+		"payout", "settlement", "reconciliation", "refund", "chargeback", "dispute",
+		"payment", "not credited", "transaction", "deposit", "collect payments",
+		"not received", "money came back", "money transfer",
 	},
 	model.CategoryBilling: {
-		"fatura", "invoice", "abonelik", "subscription", "paket", "plan",
-		"komisyon", "commission", "ücretlendirme", "ucretlendirme", "iptal talebi",
-		"upgrade", "downgrade", "billing",
+		"invoice", "subscription", "package", "plan", "commission", "billing",
+		"cancel subscription", "upgrade", "downgrade", "pricing tier",
 	},
 	model.CategoryTechnicalIssue: {
-		"hata", "error", "500", "çöktü", "coktu", "açılmıyor", "acilmiyor",
-		"yavaş", "yavas", "slow", "down", "site kapalı", "site kapali",
-		"panel açılmıyor", "yüklenmiyor", "yuklenmiyor", "timeout", "bug",
+		"error", "500", "crashed", "won't open", "will not open", "not loading",
+		"slow", "down", "site is down", "timeout", "bug", "white screen",
+		"fails", "won't upload",
 	},
 	model.CategoryOnboarding: {
-		"kurulum", "setup", "onboarding", "veri göçü", "veri gocu", "migration",
-		"canlıya", "canliya", "go-live", "başvuru", "basvuru", "aktivasyon",
-		"activation", "hesap açılışı", "hesap acilisi",
+		"setup", "onboarding", "data migration", "migration", "go live", "go-live",
+		"activation", "getting started", "account setup",
 	},
 	model.CategoryHowTo: {
-		"nasıl", "nasil", "how to", "how do", "eğitim", "egitim", "doküman",
-		"dokuman", "documentation", "kılavuz", "kilavuz", "öğrenmek", "ogrenmek",
-		"ayarlamak", "konfigüre", "konfigure",
+		"how to", "how do", "how can", "how is", "how should", "training",
+		"documentation", "docs", "guide", "manual", "learn", "configure", "tutorial",
 	},
 	model.CategoryAccountAccess: {
-		"şifre", "sifre", "password", "giriş yapamıyorum", "giris yapamiyorum",
-		"login", "oturum", "session", "yetki", "rol", "role", "kullanıcı ekle",
-		"kullanici ekle", "erişim", "erisim", "access", "2fa",
+		"password", "reset password", "can't log in", "cannot log in", "log in",
+		"login", "session", "permission", "role", "add user", "add a new user",
+		"access", "2fa",
 	},
 	model.CategoryFeatureRequest: {
-		"özellik talebi", "ozellik talebi", "feature request", "yol haritası",
-		"yol haritasi", "roadmap", "öneri", "oneri", "eklenebilir mi",
-		"olsa çok iyi", "olsa cok iyi", "destekliyor musunuz",
+		"feature request", "roadmap", "suggestion", "would be great",
+		"do you support", "can you add", "please add",
 	},
 	model.CategorySales: {
-		"satın al", "satin al", "demo", "teklif", "fiyat", "pricing", "quote",
-		"ek modül", "ek modul", "satış", "satis", "sales", "yeni paket",
+		"purchase", "buy", "demo", "quote", "pricing", "price list",
+		"add-on module", "sales", "new package",
 	},
 	model.CategoryCompliance: {
-		"kvkk", "gdpr", "sözleşme", "sozlesme", "contract", "veri silme",
-		"verilerimin silinmesi", "denetim", "audit", "compliance", "aydınlatma",
-		"aydinlatma", "belge talebi", "imha",
+		"kvkk", "gdpr", "contract", "data deletion", "delete my data", "audit",
+		"compliance", "privacy notice", "document request",
 	},
 }
 
 // urgentKeywords mark a stopped revenue stream, not an angry tone. Urgency is
 // about the business being unable to operate.
 var urgentKeywords = []string{
-	"site kapalı", "site kapali", "site down", "çöktü", "coktu", "kapandı", "kapandi",
-	"ödeme alamıyorum", "odeme alamiyorum", "ödeme alamıyoruz", "tahsilat yapamıyorum",
-	"hakediş", "hakedis", "hesabıma geçmedi", "hesabima gecmedi", "para yatmadı",
-	"para yatmadi", "kargo etiketi basmıyor", "kargo etiketi basmiyor",
-	"satış yapamıyorum", "satis yapamiyorum", "sipariş alamıyorum", "siparis alamiyorum",
-	"acil", "urgent", "production down", "müşterilerim etkileniyor",
+	"site is down", "site down", "crashed", "cannot process payments",
+	"can't process payments", "payout", "not credited to my account", "cannot ship",
+	"can't ship", "cannot receive payment", "cannot sell", "can't sell",
+	"cannot collect", "no orders", "urgent", "production down", "customers are affected",
 }
 
 // highKeywords are real breakage that has not stopped the whole business.
 var highKeywords = []string{
-	"hata", "error", "500", "aktarmıyor", "aktarmiyor", "senkronize olmuyor",
-	"çalışmıyor", "calismiyor", "başarısız", "basarisiz", "failed", "bozuk",
-	"eksik görünüyor", "eksik gorunuyor", "iade", "chargeback",
+	"error", "500", "not transferring", "not syncing", "not working",
+	"failed", "fails", "broken", "missing", "refund", "chargeback",
 }
 
 // lowKeywords are questions and requests: nothing is broken.
 var lowKeywords = []string{
-	"nasıl", "nasil", "how to", "how do", "bilgi", "öğrenmek", "ogrenmek",
-	"doküman", "dokuman", "eğitim", "egitim", "öneri", "oneri", "özellik talebi",
-	"ozellik talebi", "demo", "teklif", "fiyat", "merak",
+	"how to", "how do", "how can", "learn", "documentation", "docs",
+	"guide", "training", "suggestion", "feature request", "demo", "quote", "pricing",
 }
 
 // Classify scores the ticket text against the keyword tables.
 func (c *Classifier) Classify(_ context.Context, in port.ClassifyInput) (port.ClassifyResult, error) {
-	// The subject is weighted more heavily by being counted twice.
-	text := normalize(in.Subject + " " + in.Subject + " " + in.Body)
+	subject := normalize(in.Subject)
+	body := normalize(in.Body)
 
-	category, categoryHits := c.bestCategory(text)
-	priority, priorityHits := c.priority(text)
+	category, categoryHits := c.bestCategory(subject, body)
+	priority, priorityHits := c.priority(subject, body)
 
 	raw, _ := json.Marshal(map[string]any{
 		"engine":         modelName,
 		"category_hits":  categoryHits,
 		"priority_hits":  priorityHits,
-		"matched_length": len(text),
+		"matched_length": len(subject) + len(body),
 	})
 
 	return port.ClassifyResult{
@@ -147,7 +141,7 @@ func (c *Classifier) Classify(_ context.Context, in port.ClassifyInput) (port.Cl
 
 // bestCategory returns the highest scoring label. Ties break on the fixed order
 // of model.AllCategories so the result never depends on map iteration order.
-func (c *Classifier) bestCategory(text string) (model.Category, int) {
+func (c *Classifier) bestCategory(subject, body string) (model.Category, int) {
 	type scored struct {
 		category model.Category
 		hits     int
@@ -158,7 +152,7 @@ func (c *Classifier) bestCategory(text string) (model.Category, int) {
 	for rank, category := range model.AllCategories {
 		results = append(results, scored{
 			category: category,
-			hits:     countMatches(text, categoryKeywords[category]),
+			hits:     score(subject, body, categoryKeywords[category]),
 			rank:     rank,
 		})
 	}
@@ -182,14 +176,14 @@ func (c *Classifier) bestCategory(text string) (model.Category, int) {
 
 // priority follows revenue impact: a stopped business is urgent, visible
 // breakage is high, questions are low.
-func (c *Classifier) priority(text string) (model.TicketPriority, int) {
-	if hits := countMatches(text, urgentKeywords); hits > 0 {
+func (c *Classifier) priority(subject, body string) (model.TicketPriority, int) {
+	if hits := score(subject, body, urgentKeywords); hits > 0 {
 		return model.TicketPriorityUrgent, hits
 	}
-	if hits := countMatches(text, highKeywords); hits > 0 {
+	if hits := score(subject, body, highKeywords); hits > 0 {
 		return model.TicketPriorityHigh, hits
 	}
-	if hits := countMatches(text, lowKeywords); hits > 0 {
+	if hits := score(subject, body, lowKeywords); hits > 0 {
 		return model.TicketPriorityLow, hits
 	}
 	return model.TicketPriorityNormal, 0
@@ -203,6 +197,15 @@ func confidence(hits int) float64 {
 		return maxConfidence
 	}
 	return score
+}
+
+// score counts the distinct keywords present, crediting the subject more.
+//
+// Each keyword counts at most once per field, so a word repeated inside one
+// ticket does not inflate the score. The subject used to be concatenated twice
+// to weight it, which had no effect for exactly that reason.
+func score(subject, body string, keywords []string) int {
+	return subjectWeight*countMatches(subject, keywords) + countMatches(body, keywords)
 }
 
 func countMatches(text string, keywords []string) int {

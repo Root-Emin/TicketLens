@@ -9,7 +9,7 @@ import (
 
 	kafkago "github.com/segmentio/kafka-go"
 
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
 )
 
 // ConsumerHandler is called for each message consumed from Kafka.

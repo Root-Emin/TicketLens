@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/model"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
 )
 
 // DepartmentTicketCount is one row of the by-department breakdown.

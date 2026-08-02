@@ -1,0 +1,11 @@
+subject,body,category,priority,source,lang,generated_by
+Cannot log in after password reset,The password reset email never arrives and I still cannot log in to the panel.,account_access,high,ood_relabel,en,manual-fixture
+Marketplace sync failing since last night,Our marketplace connector stopped transferring products; the API returns 401 on the webhook.,integration,high,ood_relabel,en,manual-fixture
+How do I export a report?,Where can I find documentation on exporting sales reports to Excel?,how_to,low,ood_relabel,en,manual-fixture
+Payout missing from Friday,Friday's payout was not credited to my bank account and I cannot receive payment.,payment_ops,urgent,ood_relabel,en,manual-fixture
+Please send GDPR deletion confirmation,Under GDPR please delete all personal data for our company and confirm in writing.,compliance,normal,ood_relabel,en,manual-fixture
+Admin panel shows 500 on orders page,The orders page returns a 500 error and will not load for any user.,technical_issue,high,ood_relabel,en,manual-fixture
+Need a quote for the analytics add-on,We want to buy the analytics add-on module — please send a price quote.,sales,low,ood_relabel,en,manual-fixture
+Invoice for March is missing,Our March invoice does not appear under billing; please resend the invoice.,billing,normal,ood_relabel,en,manual-fixture
+Stuck on go-live checklist,We are still in setup and cannot finish the go-live activation steps.,onboarding,normal,ood_relabel,en,manual-fixture
+Please add multi-currency support,Feature request: we need multi-currency pricing. Is it on the roadmap?,feature_request,low,ood_relabel,en,manual-fixture

@@ -1,5 +1,10 @@
-# masterfabric-go — Backend Mimari Rehberi
+# masterfabric-go — Backend Mimari Rehberi (template, historical)
 
+> **TicketLens note:** This file documents the masterfabric-go template the
+> project was forked from. For the current product architecture (triage,
+> classifier seam, agent panel, ML workspace), read
+> [`ARCHITECTURE.md`](./ARCHITECTURE.md) instead.
+>
 > Bu doküman bir kod incelemesi (code review) değildir. Amacı, backend mimarisini
 > **öğretmektir**: hangi dosya neden var, hangi katmana ait, sistem çalışırken ne
 > yapıyor, silinirse ne kırılır.

@@ -2,14 +2,18 @@ package usecase
 
 import (
 	"context"
+	"errors"
+	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/application/triage/dto"
+	iamRepo "github.com/Root-Emin/TicketLens/internal/domain/iam/repository"
+	triageEvent "github.com/Root-Emin/TicketLens/internal/domain/triage/event"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/port"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/triage/dto"
-	iamRepo "github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/port"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 )
 
 // DefaultReviewThreshold is used when none is configured.
@@ -23,10 +27,14 @@ type AnalyzeTicketUseCase struct {
 	analysisRepo    repository.AIAnalysisRepository
 	classifier      port.Classifier
 	reviewThreshold float64
+	eventBus        events.EventBus
 	assembler       *ticketAssembler
 }
 
 // NewAnalyzeTicketUseCase creates a new AnalyzeTicketUseCase.
+//
+// eventBus may be nil in unit tests; production wiring always supplies one so
+// analysis.completed reaches the WebSocket bridge.
 func NewAnalyzeTicketUseCase(
 	ticketRepo repository.TicketRepository,
 	messageRepo repository.TicketMessageRepository,
@@ -36,6 +44,7 @@ func NewAnalyzeTicketUseCase(
 	userRepo iamRepo.UserRepository,
 	classifier port.Classifier,
 	reviewThreshold float64,
+	eventBus events.EventBus,
 ) *AnalyzeTicketUseCase {
 	if reviewThreshold <= 0 {
 		reviewThreshold = DefaultReviewThreshold
@@ -47,6 +56,7 @@ func NewAnalyzeTicketUseCase(
 		analysisRepo:    analysisRepo,
 		classifier:      classifier,
 		reviewThreshold: reviewThreshold,
+		eventBus:        eventBus,
 		assembler:       newTicketAssembler(departmentRepo, customerRepo, messageRepo, analysisRepo, userRepo),
 	}
 }
@@ -140,16 +150,36 @@ func (uc *AnalyzeTicketUseCase) Execute(ctx context.Context, orgID, ticketID uui
 		}
 	}
 
+	if uc.eventBus != nil {
+		_ = uc.eventBus.Publish(ctx, events.TopicTriage, triageEvent.AnalysisCompleted{
+			TicketID:         ticketID,
+			OrganizationID:   orgID,
+			AnalysisID:       analysis.ID,
+			NeedsHumanReview: needsReview,
+			ModelName:        result.ModelName,
+			ModelVersion:     result.ModelVersion,
+			Timestamp:        time.Now().UTC(),
+		})
+	}
+
 	return uc.assembler.toDetail(ctx, orgID, ticket, true)
 }
 
 // mapCategory resolves a classifier label onto one of the organization's
 // departments. The bool reports whether a real match was found; false means the
 // ticket fell back to the default department.
+//
+// Only a genuine "no department for this category" falls back. Any other error
+// is returned: treating a failed query as an absent mapping would quietly route
+// tickets to the default department and inflate mapping_fallback, making a
+// database problem look like a taxonomy gap.
 func (uc *AnalyzeTicketUseCase) mapCategory(ctx context.Context, orgID uuid.UUID, category model.Category) (uuid.UUID, bool, error) {
 	department, err := uc.departmentRepo.GetByCategory(ctx, orgID, category)
 	if err == nil {
 		return department.ID, true, nil
+	}
+	if !errors.Is(err, domainErr.ErrNotFound) {
+		return uuid.Nil, false, err
 	}
 
 	fallback, fallbackErr := uc.departmentRepo.GetDefault(ctx, orgID)

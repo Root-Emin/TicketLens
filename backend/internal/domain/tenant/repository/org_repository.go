@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/model"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/model"
 )
 
 // OrgRepository defines the interface for organization persistence.

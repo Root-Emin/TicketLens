@@ -3,27 +3,27 @@ package tenant
 import (
 	"net/http"
 
+	"github.com/Root-Emin/TicketLens/internal/application/tenant/dto"
+	"github.com/Root-Emin/TicketLens/internal/application/tenant/usecase"
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/repository"
+	"github.com/Root-Emin/TicketLens/internal/shared/middleware"
+	"github.com/Root-Emin/TicketLens/internal/shared/pagination"
+	"github.com/Root-Emin/TicketLens/internal/shared/response"
+	"github.com/Root-Emin/TicketLens/internal/shared/validator"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/tenant/dto"
-	"github.com/masterfabric-go/masterfabric/internal/application/tenant/usecase"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/repository"
-	"github.com/masterfabric-go/masterfabric/internal/shared/middleware"
-	"github.com/masterfabric-go/masterfabric/internal/shared/pagination"
-	"github.com/masterfabric-go/masterfabric/internal/shared/response"
-	"github.com/masterfabric-go/masterfabric/internal/shared/validator"
 )
 
 // Handler provides Tenant HTTP handlers.
 type Handler struct {
-	createOrgUC        *usecase.CreateOrgUseCase
-	createAppUC        *usecase.CreateAppUseCase
-	manageKeysUC       *usecase.ManageAPIKeysUseCase
-	createWorkspaceUC  *usecase.CreateWorkspaceUseCase
-	listWorkspacesUC   *usecase.ListWorkspacesUseCase
-	updateWorkspaceUC  *usecase.UpdateWorkspaceUseCase
-	orgRepo            repository.OrgRepository
-	appRepo            repository.AppRepository
+	createOrgUC       *usecase.CreateOrgUseCase
+	createAppUC       *usecase.CreateAppUseCase
+	manageKeysUC      *usecase.ManageAPIKeysUseCase
+	createWorkspaceUC *usecase.CreateWorkspaceUseCase
+	listWorkspacesUC  *usecase.ListWorkspacesUseCase
+	updateWorkspaceUC *usecase.UpdateWorkspaceUseCase
+	orgRepo           repository.OrgRepository
+	appRepo           repository.AppRepository
 }
 
 // NewHandler creates a new Tenant handler.
@@ -89,27 +89,36 @@ func (h *Handler) GetOrg(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ListOrgs returns a paginated list of organizations.
+// ListOrgs returns the organizations the caller belongs to.
+//
+// It used to page over every organization on the platform, which disclosed the
+// name and slug of every tenant. A user currently belongs to exactly one
+// organization (the JWT claim), so the result holds at most one entry; when
+// multi-org membership arrives this reads the membership table instead.
 func (h *Handler) ListOrgs(w http.ResponseWriter, r *http.Request) {
 	params := pagination.FromRequest(r)
-	orgs, total, err := h.orgRepo.List(r.Context(), params.Offset(), params.Limit())
+
+	orgID, ok := middleware.OrgIDFromContext(r.Context())
+	if !ok || orgID == uuid.Nil {
+		response.JSON(w, http.StatusOK, pagination.NewResult([]dto.OrgInfo{}, params, 0))
+		return
+	}
+
+	org, err := h.orgRepo.GetByID(r.Context(), orgID)
 	if err != nil {
 		response.Error(w, err)
 		return
 	}
 
-	var infos []dto.OrgInfo
-	for _, o := range orgs {
-		infos = append(infos, dto.OrgInfo{
-			ID:        o.ID,
-			Name:      o.Name,
-			Slug:      o.Slug,
-			Status:    string(o.Status),
-			CreatedAt: o.CreatedAt,
-		})
-	}
+	infos := []dto.OrgInfo{{
+		ID:        org.ID,
+		Name:      org.Name,
+		Slug:      org.Slug,
+		Status:    string(org.Status),
+		CreatedAt: org.CreatedAt,
+	}}
 
-	response.JSON(w, http.StatusOK, pagination.NewResult(infos, params, total))
+	response.JSON(w, http.StatusOK, pagination.NewResult(infos, params, len(infos)))
 }
 
 // CreateApp handles app creation within an organization.

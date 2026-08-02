@@ -2,15 +2,16 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/application/tenant/dto"
+	tenantEvent "github.com/Root-Emin/TicketLens/internal/domain/tenant/event"
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/tenant/dto"
-	tenantEvent "github.com/masterfabric-go/masterfabric/internal/domain/tenant/event"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
 )
 
 // CreateAppUseCase handles app creation within an organization.
@@ -37,7 +38,10 @@ func (uc *CreateAppUseCase) Execute(ctx context.Context, orgID uuid.UUID, req dt
 	}
 
 	// Check slug uniqueness within org
-	existing, _ := uc.appRepo.GetBySlug(ctx, orgID, req.Slug)
+	existing, err := uc.appRepo.GetBySlug(ctx, orgID, req.Slug)
+	if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+		return nil, err
+	}
 	if existing != nil {
 		return nil, domainErr.New(domainErr.ErrAlreadyExists, "app slug already taken in this organization", nil)
 	}

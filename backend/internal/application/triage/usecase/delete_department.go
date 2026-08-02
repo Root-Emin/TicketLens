@@ -3,9 +3,9 @@ package usecase
 import (
 	"context"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 )
 
 // DeleteDepartmentUseCase handles department removal.

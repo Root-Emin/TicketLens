@@ -26,7 +26,11 @@ FRONTEND_DIR="$ROOT_DIR/frontend"
 
 BACKEND_PORT="${BACKEND_PORT:-8080}"
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
-API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:$BACKEND_PORT}"
+# The backend base URL is server-side only: the browser never talks to :8080
+# directly, it goes through the Next proxy. So this is API_URL, not
+# NEXT_PUBLIC_API_URL — a NEXT_PUBLIC_ name would inline the internal address
+# into the client bundle for no reason.
+API_URL="${API_URL:-http://localhost:$BACKEND_PORT}"
 
 BACKEND_PID=""
 FRONTEND_PID=""
@@ -149,7 +153,7 @@ start_frontend_bg() {
 
     (
         cd "$FRONTEND_DIR"
-        export NEXT_PUBLIC_API_URL="$API_URL"
+        export API_URL="$API_URL"
         npm run dev -- --port "$FRONTEND_PORT" 2>&1 | prefix_output "$MAGENTA" "[frontend]"
     ) &
     FRONTEND_PID=$!
@@ -211,7 +215,8 @@ cmd_frontend() {
     supervise
 }
 
-cmd_infra()   { require_backend; (cd "$BACKEND_DIR" && ./dev.sh infra); }
+cmd_infra()      { require_backend; (cd "$BACKEND_DIR" && ./dev.sh infra); }
+cmd_classifier() { require_backend; (cd "$BACKEND_DIR" && ./dev.sh classifier); }
 cmd_migrate() { require_backend; (cd "$BACKEND_DIR" && ./dev.sh migrate); }
 cmd_down()    { require_backend; (cd "$BACKEND_DIR" && ./dev.sh down); }
 cmd_logs()    { require_backend; (cd "$BACKEND_DIR" && ./dev.sh logs); }
@@ -243,6 +248,7 @@ cmd_help() {
     echo -e "  ${GREEN}backend${NC}       Sadece backend (infra + migration + hot-reload server)"
     echo -e "  ${GREEN}frontend${NC}      Sadece frontend (Next.js dev server)"
     echo -e "  ${GREEN}infra${NC}         Sadece altyapı (Postgres, Redis, Kafka) + migration"
+    echo -e "  ${GREEN}classifier${NC}    backend/ml model servisini derle ve başlat (opsiyonel)"
     echo -e "  ${GREEN}migrate${NC}       Sadece migration"
     echo -e "  ${GREEN}install${NC}       Frontend bağımlılıklarını kur"
     echo -e "  ${GREEN}down${NC}          Docker servislerini durdur"
@@ -253,7 +259,8 @@ cmd_help() {
     echo "Ortam değişkenleri:"
     echo "  BACKEND_PORT=8080"
     echo "  FRONTEND_PORT=3000"
-    echo "  NEXT_PUBLIC_API_URL=http://localhost:8080"
+    echo "  API_URL=http://localhost:8080   (sunucu tarafı; client'a sızmaz)"
+    echo "  CLASSIFIER_URL                  (boş = keyword stub)"
 }
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -262,6 +269,7 @@ case "${1:-}" in
     backend)  cmd_backend  ;;
     frontend) cmd_frontend ;;
     infra)    cmd_infra    ;;
+    classifier) cmd_classifier ;;
     migrate)  cmd_migrate  ;;
     install)  cmd_install  ;;
     down)     cmd_down     ;;

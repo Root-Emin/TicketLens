@@ -1,6 +1,6 @@
 package main
 
-import "github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
+import "github.com/Root-Emin/TicketLens/internal/domain/triage/model"
 
 // customerSeed is one demo customer.
 type customerSeed struct {
@@ -10,20 +10,20 @@ type customerSeed struct {
 }
 
 var demoCustomers = []customerSeed{
-	{"ayse.demir@modabutik.com", "Ayşe Demir", "Moda Butik"},
-	{"mehmet.yilmaz@acmeticaret.com", "Mehmet Yılmaz", "Acme Ticaret"},
-	{"zeynep.kaya@teknomarket.com", "Zeynep Kaya", "Tekno Market"},
-	{"emre.sahin@evdekor.com", "Emre Şahin", "Ev Dekor"},
-	{"fatma.celik@organikgida.com", "Fatma Çelik", "Organik Gıda"},
-	{"burak.arslan@sporcenter.com", "Burak Arslan", "Spor Center"},
-	{"elif.dogan@kitapdunyasi.com", "Elif Doğan", "Kitap Dünyası"},
-	{"can.ozturk@otoyedek.com", "Can Öztürk", "Oto Yedek Parça"},
-	{"selin.aydin@kozmetikhouse.com", "Selin Aydın", "Kozmetik House"},
-	{"murat.kilic@yapimarket.com", "Murat Kılıç", "Yapı Market"},
-	{"deniz.polat@bebekshop.com", "Deniz Polat", "Bebek Shop"},
-	{"gizem.avci@petdunyasi.com", "Gizem Avcı", "Pet Dünyası"},
-	{"okan.tas@mobilyaevi.com", "Okan Taş", "Mobilya Evi"},
-	{"nur.erdogan@takiatolyesi.com", "Nur Erdoğan", "Takı Atölyesi"},
+	{"alice.morgan@modaboutique.com", "Alice Morgan", "Moda Boutique"},
+	{"michael.reed@acmetrade.com", "Michael Reed", "Acme Trade"},
+	{"jessica.klein@technomarket.com", "Jessica Klein", "Techno Market"},
+	{"daniel.foster@homedecor.com", "Daniel Foster", "Home Decor"},
+	{"emily.carter@organicfoods.com", "Emily Carter", "Organic Foods"},
+	{"brandon.hughes@sportcenter.com", "Brandon Hughes", "Sport Center"},
+	{"olivia.bennett@bookworld.com", "Olivia Bennett", "Book World"},
+	{"chris.walker@autoparts.com", "Chris Walker", "Auto Parts"},
+	{"sophia.turner@cosmetichouse.com", "Sophia Turner", "Cosmetic House"},
+	{"kevin.brooks@buildmarket.com", "Kevin Brooks", "Build Market"},
+	{"hannah.price@babyshop.com", "Hannah Price", "Baby Shop"},
+	{"ryan.cooper@petworld.com", "Ryan Cooper", "Pet World"},
+	{"laura.evans@furniturehome.com", "Laura Evans", "Furniture Home"},
+	{"nathan.ross@jewelrystudio.com", "Nathan Ross", "Jewelry Studio"},
 }
 
 // ticketSeed is one demo ticket. Category records what the text is written to
@@ -40,127 +40,127 @@ type ticketSeed struct {
 // the floor and needs_human_review turns true.
 const ambiguousCategory model.Category = ""
 
-// demoTickets is the ticket corpus. Volume is weighted the way a Turkish B2B
-// SaaS help desk actually looks: integration and platform faults dominate,
-// money operations and how-to questions follow.
+// demoTickets is the ticket corpus. Volume is weighted the way a B2B SaaS help
+// desk actually looks: integration and platform faults dominate, money
+// operations and how-to questions follow.
 var demoTickets = []ticketSeed{
 	// ── integration (16) ─────────────────────────────────────────────────────
-	{"Trendyol entegrasyonu ürünleri aktarmıyor", "Trendyol pazaryeri entegrasyonumuz dün akşamdan beri ürünleri aktarmıyor, senkronizasyon sürekli hata veriyor.", model.CategoryIntegration},
-	{"Hepsiburada stok senkronizasyonu çalışmıyor", "Hepsiburada entegrasyonunda stok adetleri güncellenmiyor, senkron işlemi yarım kalıyor.", model.CategoryIntegration},
-	{"N11 siparişleri panele düşmüyor", "N11 pazaryeri entegrasyonu siparişleri çekmiyor, API tarafında hata dönüyor.", model.CategoryIntegration},
-	{"Kargo etiketi basmıyor", "Yurtiçi kargo entegrasyonunda etiket oluşturulmuyor, kargo servisi hata veriyor ve sevkiyat yapamıyoruz.", model.CategoryIntegration},
-	{"Logo muhasebe entegrasyonu aktarım yapmıyor", "Logo ERP entegrasyonu kayıtları muhasebeye aktarmıyor, dün geceden beri senkron yok.", model.CategoryIntegration},
-	{"Mikro ERP bağlantısı koptu", "Mikro muhasebe entegrasyonunun bağlantısı koptu, veri aktarımı tamamen durdu.", model.CategoryIntegration},
-	{"Netsis entegrasyonunda stok kodları eşleşmiyor", "Netsis ERP entegrasyonunda ürün kodları eşleşmediği için aktarım hata veriyor.", model.CategoryIntegration},
-	{"Sanal POS entegrasyonu hata veriyor", "Sanal POS entegrasyonumuz ödeme adımında hata dönüyor, banka tarafında sorun görünmüyor.", model.CategoryIntegration},
-	{"Webhook bildirimleri gelmiyor", "Sipariş webhook bildirimleri iki gündür sunucumuza ulaşmıyor, entegrasyon loglarında kayıt yok.", model.CategoryIntegration},
-	{"API anahtarımız çalışmıyor", "Yeni oluşturduğumuz API anahtarı ile istek attığımızda entegrasyon yetki hatası dönüyor.", model.CategoryIntegration},
-	{"SDK güncellemesi sonrası senkron bozuldu", "SDK sürümünü güncelledikten sonra pazaryeri senkronizasyonu hata vermeye başladı.", model.CategoryIntegration},
-	{"Trendyol komisyon bilgisi aktarılmıyor", "Trendyol entegrasyonunda komisyon alanı boş geliyor, aktarım eksik yapılıyor.", model.CategoryIntegration},
-	{"Pazaryeri fiyat güncellemesi gecikiyor", "Pazaryeri entegrasyonunda fiyat güncellemeleri saatler sonra yansıyor, senkron çok yavaş.", model.CategoryIntegration},
-	{"Aras kargo takip numarası dönmüyor", "Aras kargo entegrasyonu gönderi oluşturuyor ama takip numarası aktarmıyor.", model.CategoryIntegration},
-	{"Hepsiburada iadeleri aktarılmıyor", "Hepsiburada entegrasyonunda iade siparişleri panele aktarılmıyor, senkron atlıyor.", model.CategoryIntegration},
-	{"API rate limit hatası alıyoruz", "Entegrasyon servisimiz API üzerinden istek atarken sürekli limit hatası alıyor.", model.CategoryIntegration},
+	{"Trendyol integration is not transferring products", "Our Trendyol marketplace integration has not been transferring products since last night, the sync keeps failing.", model.CategoryIntegration},
+	{"Hepsiburada stock synchronization is not working", "Stock counts are not updating in the Hepsiburada integration, the sync job keeps halting halfway.", model.CategoryIntegration},
+	{"N11 orders are not coming into the panel", "The N11 marketplace integration is not pulling orders, the API returns an error.", model.CategoryIntegration},
+	{"Shipping label won't print", "The cargo integration is not creating labels, the shipping service returns an error and we cannot ship.", model.CategoryIntegration},
+	{"Logo accounting integration is not transferring records", "The Logo ERP integration is not transferring records to accounting, there has been no sync since last night.", model.CategoryIntegration},
+	{"Mikro ERP connection dropped", "The Mikro accounting integration lost its connection, data transfer stopped completely.", model.CategoryIntegration},
+	{"Product codes don't match in the Netsis integration", "In the Netsis ERP integration the product codes do not match, so the transfer fails.", model.CategoryIntegration},
+	{"Virtual POS integration returns an error", "Our virtual POS integration returns an error at the checkout step, the bank side looks fine.", model.CategoryIntegration},
+	{"Webhook notifications are not arriving", "Order webhook notifications have not reached our server for two days, there is no record in the integration logs.", model.CategoryIntegration},
+	{"Our API key is not working", "When we send requests with the newly created API key, the integration returns an authorization error.", model.CategoryIntegration},
+	{"Sync broke after the SDK update", "After we updated the SDK version, the marketplace synchronization started failing.", model.CategoryIntegration},
+	{"Trendyol commission data is not transferred", "In the Trendyol integration the commission field comes empty, the transfer is incomplete.", model.CategoryIntegration},
+	{"Marketplace price updates are delayed", "In the marketplace integration price updates appear hours later, the sync is very slow.", model.CategoryIntegration},
+	{"Aras cargo tracking number is not returned", "The Aras cargo integration creates the shipment but does not transfer the tracking number.", model.CategoryIntegration},
+	{"Hepsiburada returns are not transferred", "In the Hepsiburada integration return orders are not transferred to the panel, the sync skips them.", model.CategoryIntegration},
+	{"We are getting API rate limit errors", "Our integration service keeps hitting rate limit errors when making requests over the API.", model.CategoryIntegration},
 
 	// ── technical_issue (16) ─────────────────────────────────────────────────
-	{"Panel açılmıyor, 500 hatası alıyoruz", "Sabahtan beri yönetim paneli açılmıyor, ekranda 500 hatası görünüyor.", model.CategoryTechnicalIssue},
-	{"Raporlar yüklenmiyor", "Satış raporları sayfası yüklenmiyor, uzun süre bekledikten sonra hata veriyor.", model.CategoryTechnicalIssue},
-	{"Site çok yavaş çalışıyor", "Panel bugün aşırı yavaş, sayfalar geç açılıyor ve zaman zaman hata veriyor.", model.CategoryTechnicalIssue},
-	{"Sipariş listesi yüklenmiyor", "Sipariş listesi ekranı yüklenmiyor, sayfa boş kalıyor ve konsolda hata var.", model.CategoryTechnicalIssue},
-	{"Ürün ekleme sayfası hata veriyor", "Yeni ürün eklerken kaydet butonuna basınca hata alıyoruz, kayıt oluşmuyor.", model.CategoryTechnicalIssue},
-	{"Dashboard grafikleri boş geliyor", "Ana ekrandaki grafikler yüklenmiyor, veri gelmiyor ve hata mesajı çıkıyor.", model.CategoryTechnicalIssue},
-	{"Arama sonuçları çok yavaş dönüyor", "Ürün araması aşırı yavaş, bazen hiç sonuç dönmeden hata veriyor.", model.CategoryTechnicalIssue},
-	{"Excel dışa aktarma hata veriyor", "Rapor Excel olarak indirilmek istendiğinde işlem hata ile sonuçlanıyor.", model.CategoryTechnicalIssue},
-	{"Görsel yükleme başarısız oluyor", "Ürün görseli yüklerken işlem hata veriyor, dosya bir türlü yüklenmiyor.", model.CategoryTechnicalIssue},
-	{"Site kapalı, müşterilerim giremiyor", "Sitemiz tamamen kapalı, müşterilerim etkileniyor ve satış yapamıyorum.", model.CategoryTechnicalIssue},
-	{"Filtreleme çalışmıyor", "Sipariş ekranındaki filtreler çalışmıyor, uygulayınca hata veriyor.", model.CategoryTechnicalIssue},
-	{"Toplu güncelleme ekranı açılmıyor", "Toplu fiyat güncelleme ekranı açılmıyor, sürekli hata veriyor.", model.CategoryTechnicalIssue},
-	{"Bildirimler gelmiyor", "Panel içi bildirimler görünmüyor, sayfa yüklenmiyor ve hata düşüyor.", model.CategoryTechnicalIssue},
-	{"Mobil uygulamada beyaz ekran", "Mobil uygulama açılışta beyaz ekranda kalıyor ve hata veriyor.", model.CategoryTechnicalIssue},
-	{"Yazdırma önizlemesi yüklenmiyor", "Fiş yazdırma önizlemesi yüklenmiyor, ekran boş kalıyor ve hata çıkıyor.", model.CategoryTechnicalIssue},
-	{"Panel çok yavaş, zaman aşımı alıyoruz", "Panelde işlemler çok yavaş ilerliyor, sık sık timeout hatası alıyoruz.", model.CategoryTechnicalIssue},
+	{"The panel won't open, we get a 500 error", "Since this morning the admin panel won't open, a 500 error appears on the screen.", model.CategoryTechnicalIssue},
+	{"Reports are not loading", "The sales reports page is not loading, it errors out after a long wait.", model.CategoryTechnicalIssue},
+	{"The site is running very slowly", "The panel is extremely slow today, pages open late and occasionally throw an error.", model.CategoryTechnicalIssue},
+	{"Order list is not loading", "The order list screen is not loading, the page stays blank and there is an error in the console.", model.CategoryTechnicalIssue},
+	{"Product add page throws an error", "When adding a new product and pressing save we get an error, the record is not created.", model.CategoryTechnicalIssue},
+	{"Dashboard charts come up empty", "The charts on the home screen are not loading, no data appears and an error message shows.", model.CategoryTechnicalIssue},
+	{"Search results return very slowly", "Product search is extremely slow, sometimes it errors without returning any results.", model.CategoryTechnicalIssue},
+	{"Excel export throws an error", "When trying to download a report as Excel the operation ends with an error.", model.CategoryTechnicalIssue},
+	{"Image upload fails", "When uploading a product image the operation errors, the file just won't upload.", model.CategoryTechnicalIssue},
+	{"The site is down, my customers can't get in", "Our site is completely down, my customers are affected and I cannot sell.", model.CategoryTechnicalIssue},
+	{"Filtering is not working", "The filters on the order screen are not working, applying them throws an error.", model.CategoryTechnicalIssue},
+	{"Bulk update screen won't open", "The bulk price update screen won't open, it keeps throwing an error.", model.CategoryTechnicalIssue},
+	{"Notifications are not showing", "In-panel notifications don't show, the page is not loading and an error drops.", model.CategoryTechnicalIssue},
+	{"White screen in the mobile app", "The mobile app stays on a white screen at launch and throws an error.", model.CategoryTechnicalIssue},
+	{"Print preview is not loading", "The receipt print preview is not loading, the screen stays blank and an error appears.", model.CategoryTechnicalIssue},
+	{"The panel is very slow, we get timeouts", "Operations in the panel are very slow, we frequently get timeout errors.", model.CategoryTechnicalIssue},
 
 	// ── payment_ops (10) ─────────────────────────────────────────────────────
-	{"Dünkü hakedişim hesabıma geçmedi", "Dün kapanan hakediş tutarı hesabıma geçmedi, ödeme alamıyorum.", model.CategoryPaymentOps},
-	{"İade işlemi müşteriye yansımadı", "Onayladığımız iade tutarı müşterinin kartına yansımadı, iade süreci takılı.", model.CategoryPaymentOps},
-	{"Chargeback bildirimi aldık", "Bir işlem için chargeback bildirimi geldi, ters ibraz süreci hakkında bilgi almak istiyoruz.", model.CategoryPaymentOps},
-	{"Settlement raporu eksik görünüyor", "Bu haftanın settlement raporunda bazı işlemler eksik görünüyor.", model.CategoryPaymentOps},
-	{"Ödeme alamıyorum", "Tahsilat yapamıyorum, gelen ödemeler hesabıma geçmedi ve hakediş görünmüyor.", model.CategoryPaymentOps},
-	{"Hakediş tutarı eksik hesaplanmış", "Bu ayki hakediş tutarı beklediğimizden düşük, mutabakat farkı var.", model.CategoryPaymentOps},
-	{"İade tutarı hatalı hesaplandı", "Kısmi iade işleminde iade tutarı yanlış hesaplandı, para eksik döndü.", model.CategoryPaymentOps},
-	{"Mutabakat raporunda fark var", "Mutabakat dosyası ile panel arasındaki tutarlar uyuşmuyor, işlem eksik görünüyor.", model.CategoryPaymentOps},
-	{"Para transferi gecikti", "Hakediş ödemesi normalde iki günde geliyordu, bu kez para yatmadı.", model.CategoryPaymentOps},
-	{"İşlem eksik görünüyor", "Panelde dünkü işlemlerden biri eksik görünüyor, settlement tarafında da yok.", model.CategoryPaymentOps},
+	{"Yesterday's payout did not reach my account", "The payout that closed yesterday was not credited to my account, I cannot receive payment.", model.CategoryPaymentOps},
+	{"The refund was not reflected to the customer", "The refund amount we approved was not reflected on the customer's card, the refund process is stuck.", model.CategoryPaymentOps},
+	{"We received a chargeback notice", "A chargeback notice arrived for a transaction, we would like information about the dispute process.", model.CategoryPaymentOps},
+	{"The settlement report looks incomplete", "Some transactions appear to be missing in this week's settlement report.", model.CategoryPaymentOps},
+	{"I cannot receive payment", "I cannot collect payments, incoming payments were not credited to my account and no payout shows.", model.CategoryPaymentOps},
+	{"The payout amount is calculated short", "This month's payout is lower than expected, there is a reconciliation difference.", model.CategoryPaymentOps},
+	{"The refund amount was calculated incorrectly", "In a partial refund the refund amount was miscalculated, the money came back short.", model.CategoryPaymentOps},
+	{"There is a difference in the reconciliation report", "The amounts between the reconciliation file and the panel do not match, a transaction appears missing.", model.CategoryPaymentOps},
+	{"The money transfer was delayed", "The payout normally arrived in two days, this time the deposit did not land.", model.CategoryPaymentOps},
+	{"A transaction appears missing", "One of yesterday's transactions appears missing in the panel and is not in the settlement either.", model.CategoryPaymentOps},
 
 	// ── how_to (9) ───────────────────────────────────────────────────────────
-	{"Kampanya nasıl oluşturulur?", "Sezon indirimi için kampanya nasıl oluşturulur, adımları öğrenmek istiyoruz.", model.CategoryHowTo},
-	{"Toplu ürün yükleme nasıl yapılır?", "Elimizdeki listeyi toplu olarak nasıl yükleriz, doküman var mı?", model.CategoryHowTo},
-	{"Kullanım kılavuzuna nereden ulaşırım?", "Panelin kullanım kılavuzu veya dokümantasyonu nerede bulunuyor?", model.CategoryHowTo},
-	{"Raporları nasıl filtrelerim?", "Rapor ekranında tarih bazlı filtrelemeyi nasıl yaparım, kılavuz var mı?", model.CategoryHowTo},
-	{"Eğitim videoları var mı?", "Yeni işe başlayan ekip için eğitim içerikleri veya doküman mevcut mu?", model.CategoryHowTo},
-	{"Bildirim ayarlarını nasıl konfigüre ederim?", "Bildirim tercihlerini nasıl ayarlarım, konfigüre etmek için doküman var mı?", model.CategoryHowTo},
-	{"Stok uyarı seviyesi nasıl ayarlanır?", "Kritik stok uyarısını nasıl ayarlamak gerekiyor, öğrenmek istiyoruz.", model.CategoryHowTo},
-	{"Raporlama modülünü öğrenmek istiyoruz", "Raporlama modülü için eğitim veya kılavuz talep ediyoruz.", model.CategoryHowTo},
-	{"Panel ayarlarını nasıl değiştiririm?", "Genel panel ayarlarını nasıl değiştirebilirim, dokümanda göremedim.", model.CategoryHowTo},
+	{"How do I create a campaign?", "We want to learn how to create a campaign for the seasonal discount, step by step.", model.CategoryHowTo},
+	{"How do I do a bulk product upload?", "How can we upload our list in bulk, is there documentation for it?", model.CategoryHowTo},
+	{"Where can I find the user manual?", "Where is the panel's user manual or documentation located?", model.CategoryHowTo},
+	{"How do I filter reports?", "How do I filter reports by date on the report screen, is there a guide?", model.CategoryHowTo},
+	{"Are there any training videos?", "Is there training content or documentation for a new team member?", model.CategoryHowTo},
+	{"How do I configure notification settings?", "How do I set my notification preferences, is there documentation to configure them?", model.CategoryHowTo},
+	{"How is the low-stock alert level set?", "How should I configure the critical stock alert, we would like to learn.", model.CategoryHowTo},
+	{"We want to learn the reporting module", "We request training or a guide for the reporting module.", model.CategoryHowTo},
+	{"How do I change panel settings?", "How can I change the general panel settings, I could not find it in the documentation?", model.CategoryHowTo},
 
-	// ── billing (3) — bu org'da karşılık gelen departman YOK ──────────────────
-	{"Şubat ayı faturamı göremiyorum", "Şubat ayına ait faturamız panelde görünmüyor, fatura talep ediyoruz.", model.CategoryBilling},
-	{"Abonelik paketimizi yükseltmek istiyoruz", "Mevcut abonelik paketimizi bir üst pakete yükseltmek istiyoruz.", model.CategoryBilling},
-	{"Komisyon oranımız yanlış", "Sözleşmede belirtilen komisyon oranı ile faturaya yansıyan oran farklı.", model.CategoryBilling},
+	// ── billing (3) — this org has NO matching department ─────────────────────
+	{"I can't see my February invoice", "Our invoice for February does not appear in the panel, we request the invoice.", model.CategoryBilling},
+	{"We want to upgrade our subscription package", "We would like to upgrade our current subscription package to a higher plan.", model.CategoryBilling},
+	{"Our commission rate is wrong", "The commission rate in the contract differs from the rate reflected on the invoice.", model.CategoryBilling},
 
 	// ── onboarding (3) ───────────────────────────────────────────────────────
-	{"Kurulum sürecinde takıldık", "Kurulum adımlarında ilerleyemiyoruz, setup sırasında destek almak istiyoruz.", model.CategoryOnboarding},
-	{"Veri göçü ne kadar sürer?", "Eski sistemden veri göçü süreci ne kadar sürüyor, migration planı nedir?", model.CategoryOnboarding},
-	{"Canlıya çıkış için neler gerekli?", "Canlıya geçiş öncesi aktivasyon için hangi adımları tamamlamamız gerekiyor?", model.CategoryOnboarding},
+	{"We're stuck during setup", "We cannot progress through the setup steps, we would like support during setup.", model.CategoryOnboarding},
+	{"How long does data migration take?", "How long does the data migration process from the old system take, what is the migration plan?", model.CategoryOnboarding},
+	{"What is needed to go live?", "What activation steps must we complete for go-live before going live?", model.CategoryOnboarding},
 
 	// ── account_access (3) ───────────────────────────────────────────────────
-	{"Şifremi sıfırlayamıyorum", "Şifre sıfırlama maili gelmiyor, panele giriş yapamıyorum.", model.CategoryAccountAccess},
-	{"Yeni kullanıcı ekleyemiyoruz", "Ekibe yeni kullanıcı ekle dediğimizde yetki hatası alıyoruz, rol atayamıyoruz.", model.CategoryAccountAccess},
-	{"Panele erişim iznimiz yok", "Muhasebe ekibinin panele erişimi yok, yetki tanımlaması yapılamıyor.", model.CategoryAccountAccess},
+	{"I can't reset my password", "The password reset email is not arriving, I cannot log in to the panel.", model.CategoryAccountAccess},
+	{"We can't add a new user", "When we try to add a new user to the team we get a permission error, we cannot assign a role.", model.CategoryAccountAccess},
+	{"We don't have access to the panel", "The accounting team has no access to the panel, permissions cannot be defined.", model.CategoryAccountAccess},
 
 	// ── feature_request (3) ──────────────────────────────────────────────────
-	{"Toplu indirim özelliği talebi", "Ürün gruplarına toplu indirim uygulayabileceğimiz bir özellik talebi iletmek istiyoruz.", model.CategoryFeatureRequest},
-	{"Yol haritasında çoklu depo var mı?", "Çoklu depo yönetimi yol haritasında mı, roadmap paylaşabilir misiniz?", model.CategoryFeatureRequest},
-	{"Çoklu para birimi destekliyor musunuz?", "Farklı para birimlerinde satış yapmayı destekliyor musunuz, öneri olarak iletiyoruz.", model.CategoryFeatureRequest},
+	{"Feature request for bulk discounts", "We would like to submit a feature request for applying bulk discounts to product groups.", model.CategoryFeatureRequest},
+	{"Is multi-warehouse on the roadmap?", "Is multi-warehouse management on the roadmap, can you share it?", model.CategoryFeatureRequest},
+	{"Do you support multiple currencies?", "Do you support selling in different currencies, we are submitting this as a suggestion.", model.CategoryFeatureRequest},
 
 	// ── sales (3) ────────────────────────────────────────────────────────────
-	{"Ek modül için teklif istiyoruz", "Raporlama ek modülünü satın almak istiyoruz, fiyat teklifi rica ederiz.", model.CategorySales},
-	{"Demo talebi", "Kurumsal sürüm için demo talebimiz var, uygun bir zamanda görüşebilir miyiz?", model.CategorySales},
-	{"Fiyat listesi paylaşabilir misiniz?", "Yeni paket seçenekleri için güncel fiyat listesi ve teklif rica ediyoruz.", model.CategorySales},
+	{"We'd like a quote for an add-on module", "We want to purchase the reporting add-on module, we kindly request a price quote.", model.CategorySales},
+	{"Demo request", "We have a demo request for the enterprise edition, could we meet at a convenient time?", model.CategorySales},
+	{"Could you share a price list?", "We request a current price list and a quote for the new package options.", model.CategorySales},
 
 	// ── compliance (3) ───────────────────────────────────────────────────────
-	{"KVKK kapsamında veri silme talebi", "KVKK kapsamında şirketimize ait verilerin imha edilmesini talep ediyoruz.", model.CategoryCompliance},
-	{"Aydınlatma metni ve sözleşme talebi", "Aydınlatma metni ile güncel sözleşme örneğini paylaşmanızı rica ederiz.", model.CategoryCompliance},
-	{"Denetim için belge talebi", "Yıllık denetim sürecimiz için gerekli belge talebimiz bulunuyor.", model.CategoryCompliance},
+	{"Data deletion request under KVKK", "Under KVKK we request the deletion of the data belonging to our company.", model.CategoryCompliance},
+	{"Privacy notice and contract request", "We kindly request the privacy notice and a current copy of the contract.", model.CategoryCompliance},
+	{"Document request for an audit", "We have a document request for our annual audit process.", model.CategoryCompliance},
 
-	// ── belirsiz (7) — anahtar kelime yok, düşük güven senaryosu ─────────────
-	{"Bir konuda yardım rica ediyorum", "Merhaba, dün görüştüğümüz konuyla ilgili tarafınızdan dönüş bekliyoruz.", ambiguousCategory},
-	{"Kısa bir sorum olacak", "Geçen hafta ilettiğimiz talep hakkında güncel durum nedir acaba?", ambiguousCategory},
-	{"Geri dönüş bekliyoruz", "Konuyla ilgili ekibinizden henüz bir yanıt alamadık, teşekkürler.", ambiguousCategory},
-	{"Görüşmemizin devamı", "Salı günkü toplantıda konuştuklarımızı ilerletmek istiyoruz.", ambiguousCategory},
-	{"Ekteki konu hakkında", "Daha önce ilettiğimiz konuyla ilgili bir gelişme var mı?", ambiguousCategory},
-	{"Ufak bir talebimiz var", "Uygun olduğunuzda bizimle iletişime geçebilir misiniz?", ambiguousCategory},
-	{"Durum güncellemesi", "Süreç hangi aşamada, bilgilendirme yapabilir misiniz?", ambiguousCategory},
+	// ── ambiguous (7) — no keywords, low-confidence scenario ──────────────────
+	{"I'd like to ask about something", "Hello, we are waiting to hear back from you regarding what we discussed yesterday.", ambiguousCategory},
+	{"I have a quick question", "What is the current state of the request we submitted last week?", ambiguousCategory},
+	{"We're waiting to hear back", "We have not yet heard back from your team on the matter, thank you.", ambiguousCategory},
+	{"Continuation of our conversation", "We would like to move forward with what we talked about in Tuesday's meeting.", ambiguousCategory},
+	{"About the attached matter", "Is there any progress on the matter we shared earlier?", ambiguousCategory},
+	{"We have a small request", "Could you get in touch with us when you are available?", ambiguousCategory},
+	{"A quick check-in", "What stage is the process at, could you let us know?", ambiguousCategory},
 }
 
 // agentReplies feed the multi-message threads.
 var agentReplies = []string{
-	"Merhaba, talebinizi aldık. İlgili ekip inceliyor, en kısa sürede dönüş yapacağız.",
-	"Konuyu teknik ekibe ilettik. Loglarda ilgili kaydı bulduk, üzerinde çalışıyoruz.",
-	"Sorunu tespit ettik, bir düzeltme hazırlanıyor. Yayına alındığında bilgilendireceğiz.",
-	"Kontrollerimizi tamamladık, işlemi tarafımızdan yeniden başlattık. Teyit eder misiniz?",
-	"Bilgi için teşekkürler, süreci güncelledik ve takibe aldık.",
+	"Hello, we have received your request. The relevant team is reviewing it and we will get back to you as soon as possible.",
+	"We have forwarded the matter to the technical team. We found the related record in the logs and are working on it.",
+	"We have identified the issue and a fix is being prepared. We will let you know once it is deployed.",
+	"We have completed our checks and restarted the operation on our side. Could you please confirm?",
+	"Thanks for the details, we have updated the process and are tracking it.",
 }
 
 var customerFollowUps = []string{
-	"Teşekkürler, ne zaman çözüleceği konusunda bilgi verebilir misiniz?",
-	"Sorun devam ediyor, ekran görüntüsünü paylaşıyorum.",
-	"Bugün tekrar denedik ancak aynı durumla karşılaştık.",
-	"Anladım, bekliyoruz. Acil olduğunu tekrar belirtmek isterim.",
+	"Thanks, could you let us know when this will be resolved?",
+	"The issue persists, I am sharing a screenshot.",
+	"We tried again today but ran into the same situation.",
+	"Understood, we will wait. I would like to stress that this is urgent.",
 }
 
 var internalNotes = []string{
-	"Dahili not: müşteri kritik hesap, SLA takibi yapılmalı.",
-	"Dahili not: benzer kayıt geçen hafta da açılmıştı, tekrar eden sorun.",
-	"Dahili not: entegrasyon ekibine eskale edildi.",
+	"Internal note: critical customer, SLA must be tracked.",
+	"Internal note: a similar record was opened last week, recurring issue.",
+	"Internal note: escalated to the integration team.",
 }

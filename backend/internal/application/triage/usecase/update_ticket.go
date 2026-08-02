@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/application/triage/dto"
+	auditModel "github.com/Root-Emin/TicketLens/internal/domain/audit/model"
+	auditRepo "github.com/Root-Emin/TicketLens/internal/domain/audit/repository"
+	iamRepo "github.com/Root-Emin/TicketLens/internal/domain/iam/repository"
+	triageEvent "github.com/Root-Emin/TicketLens/internal/domain/triage/event"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/triage/dto"
-	auditModel "github.com/masterfabric-go/masterfabric/internal/domain/audit/model"
-	auditRepo "github.com/masterfabric-go/masterfabric/internal/domain/audit/repository"
-	iamRepo "github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
-	triageEvent "github.com/masterfabric-go/masterfabric/internal/domain/triage/event"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
 )
 
 // UpdateTicketUseCase applies a human's corrections to a ticket.

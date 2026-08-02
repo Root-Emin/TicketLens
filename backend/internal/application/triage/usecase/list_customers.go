@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
+	"github.com/Root-Emin/TicketLens/internal/application/triage/dto"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/triage/dto"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
 )
 
 // ListCustomersUseCase lists an organization's customers.

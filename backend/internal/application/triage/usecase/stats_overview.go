@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/application/triage/dto"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/triage/dto"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
 )
 
 // defaultStatsWindow is the reporting period when no from/to is supplied.

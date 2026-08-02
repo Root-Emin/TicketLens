@@ -15,8 +15,14 @@ API client. If an endpoint changes, it changes here first.
 - Auth: `Authorization: Bearer <access_token>` on every endpoint except `/auth/*`
   and `/health/*`.
 - Every resource is scoped to the caller's `organization_id`, taken from the JWT
-  claims — **never** from a request body or query parameter. Cross-org reads must
-  return `404`, not `403` (do not leak existence).
+  claims — **never** from a request body, query parameter or path segment. Cross-org
+  reads must return `404`, not `403` (do not leak existence).
+- Where a path does carry an id (the template's `/organizations/{orgId}/apps/{appId}/…`
+  routes), the id is checked against the token before the handler runs, and a child
+  id is checked against its parent. A permission is granted *within* an
+  organization, so RBAC alone never authorizes a path naming a different one.
+- `X-Organization-ID` may only repeat the organization already in the token.
+  A disagreeing value is `403`; the header cannot establish a tenant by itself.
 - IDs are UUID v4.
 - Timestamps are RFC3339 UTC (`2026-07-31T14:05:00Z`).
 - Error envelope: reuse the template's existing error response shape. Do not
@@ -130,7 +136,7 @@ Append-only. A ticket can have several analyses (re-runs, model comparisons).
 
 **`POST /customers`** — `customer:manage`
 ```json
-{"email":"ayse@acme.com","full_name":"Ayşe Demir","company":"Acme"}
+{"email":"alice@acme.com","full_name":"Alice Morgan","company":"Acme"}
 ```
 `409` if the email already exists in this organization.
 
@@ -193,13 +199,16 @@ N+1:
       "priority": "high",
       "priority_overridden": false,
       "department": {"id":"uuid","name":"Technical"},
-      "customer": {"id":"uuid","full_name":"Ayşe Demir","email":"ayse@acme.com"},
+      "customer": {"id":"uuid","full_name":"Alice Morgan","email":"alice@acme.com"},
       "assignee": null,
       "message_count": 3,
       "latest_analysis": {
+        "predicted_category": "integration",
+        "predicted_priority": "high",
         "priority_confidence": 0.94,
         "department_confidence": 0.71,
         "needs_human_review": false,
+        "mapping_fallback": false,
         "model_name": "ticketlens-berturk"
       },
       "created_at": "2026-07-31T09:12:00Z",
@@ -219,6 +228,14 @@ N+1:
 
 Same shape as the list item, plus `messages` (ascending) and `analyses`
 (descending, full objects including `raw_response`).
+
+Also carries `review_threshold` — the confidence cutoff currently configured via
+`CLASSIFIER_REVIEW_THRESHOLD`. It is published so a client can draw the cutoff on
+a confidence meter without hardcoding its own copy. It is the *current* setting,
+not the one each analysis was judged under; the recorded verdict is
+`needs_human_review` on the analysis itself. Every endpoint returning a ticket
+detail (`POST /tickets`, `GET/PATCH /tickets/{id}`, assign, re-analyze) includes
+it.
 
 ---
 
@@ -298,7 +315,7 @@ compute it in SQL, not in the frontend.
 The Go side depends on a port, not on HTTP:
 
 ```go
-// internal/domain/triage/classifier.go
+// internal/domain/triage/port/classifier.go
 type Classification struct {
     Priority           string
     PriorityConfidence float64
@@ -315,11 +332,11 @@ type Classifier interface {
 }
 ```
 
-Adapters:
-- `infrastructure/ml.HTTPClassifier` → `POST {ML_SERVICE_URL}/classify`
-- `infrastructure/ml.StubClassifier` → deterministic fake, used in tests and
-  whenever `ML_SERVICE_URL` is empty. **The backend must start and work without
-  the Python service running.**
+Adapters (the env var is `CLASSIFIER_URL`; there is no `ML_SERVICE_URL`):
+- `infrastructure/classifier/http` (`httpclassifier`) → `POST {CLASSIFIER_URL}/classify`
+- `infrastructure/classifier/stub` → deterministic keyword fake, used in tests
+  and whenever `CLASSIFIER_URL` is empty. **The backend must start and work
+  without the Python service running.**
 
 The classifier is called from an event consumer on `ticket.created`, never
 inline in the HTTP handler — a cold Render instance takes 30+ seconds to wake and

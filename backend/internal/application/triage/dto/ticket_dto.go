@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/model"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
 )
 
 // CreateTicketRequest is the input for raising a ticket.
@@ -69,10 +69,14 @@ type UserRef struct {
 // DepartmentConfidence carries the CATEGORY confidence; the field keeps its
 // name to match the stored column (see migration 00018).
 type LatestAnalysis struct {
-	PredictedCategory    *model.Category `json:"predicted_category"`
-	PriorityConfidence   float64         `json:"priority_confidence"`
-	DepartmentConfidence float64         `json:"department_confidence"`
-	NeedsHumanReview     bool            `json:"needs_human_review"`
+	PredictedCategory *model.Category `json:"predicted_category"`
+	// PredictedPriority is the priority the model proposed, kept alongside the
+	// category so the queue can show "AI said X, agent set Y" without a second
+	// request per ticket for the full analysis history.
+	PredictedPriority    string  `json:"predicted_priority"`
+	PriorityConfidence   float64 `json:"priority_confidence"`
+	DepartmentConfidence float64 `json:"department_confidence"`
+	NeedsHumanReview     bool    `json:"needs_human_review"`
 	// MappingFallback marks a ticket the system could not route: the predicted
 	// category has no department in this organization. The UI renders a
 	// "could not be routed" badge from it.
@@ -136,4 +140,14 @@ type TicketDetail struct {
 	TicketListItem
 	Messages []MessageInfo  `json:"messages"`
 	Analyses []AnalysisInfo `json:"analyses"`
+	// ReviewThreshold is the confidence cutoff currently configured
+	// (CLASSIFIER_REVIEW_THRESHOLD). It is published so the UI can draw the
+	// cutoff on a confidence meter instead of hardcoding a copy that silently
+	// disagrees the moment the setting changes.
+	//
+	// It is the *current* setting, not the one each analysis was judged under —
+	// the threshold is not stored per row. Each analysis carries its own verdict
+	// in NeedsHumanReview, so read that for "was this flagged", and read this
+	// only to show where the line sits today.
+	ReviewThreshold float64 `json:"review_threshold"`
 }

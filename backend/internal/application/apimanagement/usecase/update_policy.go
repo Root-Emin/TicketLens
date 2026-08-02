@@ -2,11 +2,13 @@ package usecase
 
 import (
 	"context"
+	"errors"
 
+	"github.com/Root-Emin/TicketLens/internal/application/apimanagement/dto"
+	"github.com/Root-Emin/TicketLens/internal/domain/apimanagement/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/apimanagement/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/apimanagement/dto"
-	"github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/repository"
 )
 
 // UpdatePolicyUseCase handles endpoint policy updates.
@@ -21,7 +23,12 @@ func NewUpdatePolicyUseCase(policyRepo repository.PolicyRepository) *UpdatePolic
 
 // Execute creates or updates a policy for an endpoint.
 func (uc *UpdatePolicyUseCase) Execute(ctx context.Context, endpointID uuid.UUID, req dto.UpdatePolicyRequest) (*dto.PolicyInfo, error) {
-	existing, _ := uc.policyRepo.GetByEndpointID(ctx, endpointID)
+	// A missing policy is the normal "create" path; any other lookup error is a
+	// real failure and must not be mistaken for "no policy yet".
+	existing, err := uc.policyRepo.GetByEndpointID(ctx, endpointID)
+	if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+		return nil, err
+	}
 
 	authPolicy := req.AuthPolicy
 	if authPolicy == "" {

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 )
 
 // JSON writes a JSON response with the given status code and payload.

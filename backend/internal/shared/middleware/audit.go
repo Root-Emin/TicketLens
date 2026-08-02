@@ -3,9 +3,9 @@ package middleware
 import (
 	"net/http"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/audit/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/audit/repository"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/audit/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/audit/repository"
 )
 
 // AuditLog is middleware that records audit log entries for each request.

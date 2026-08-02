@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/iam/model"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/iam/model"
 )
 
 // UserRepository defines the interface for user persistence.
@@ -15,4 +15,9 @@ type UserRepository interface {
 	Update(ctx context.Context, user *model.User) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, offset, limit int) ([]*model.User, int, error)
+
+	// ListByOrganization returns the users assigned to a role in the given
+	// organization. Callers serving HTTP must prefer it over List: List spans
+	// the whole platform and would disclose accounts from other tenants.
+	ListByOrganization(ctx context.Context, orgID uuid.UUID, offset, limit int) ([]*model.User, int, error)
 }

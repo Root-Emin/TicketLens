@@ -1,0 +1,43 @@
+# Build context for deployments/Dockerfile (context = backend/).
+#
+# That Dockerfile does `COPY . .`, so without this file the Go image build ships
+# the entire ML workspace and the local caches to the daemon — close to a
+# gigabyte, none of it needed to compile a Go binary.
+
+# The ML workspace is a separate service with its own Dockerfile and its own
+# build context (deployments/docker-compose.yml -> classifier). The Go image
+# must never carry the Python virtualenv or the trained checkpoints.
+ml/
+
+# Local build caches and outputs (see .gitignore).
+tmp/
+bin/
+dist/
+.tmp/
+*.test
+*.out
+coverage.html
+
+# VCS and tooling
+.git/
+.github/
+.cursor/
+.cursor-plugin/
+.air.toml
+
+# Environment — never bake local secrets into an image layer.
+.env
+.env.local
+.env.*.local
+
+# Docs and repo furniture. Migrations are copied explicitly by the Dockerfile,
+# so nothing here is needed at build time.
+*.md
+!README.md
+docs/
+postman/
+LICENSE
+
+# OS noise
+.DS_Store
+Thumbs.db

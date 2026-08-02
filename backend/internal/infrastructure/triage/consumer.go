@@ -7,9 +7,23 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	triageUC "github.com/masterfabric-go/masterfabric/internal/application/triage/usecase"
-	triageEvent "github.com/masterfabric-go/masterfabric/internal/domain/triage/event"
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	triageUC "github.com/Root-Emin/TicketLens/internal/application/triage/usecase"
+	triageEvent "github.com/Root-Emin/TicketLens/internal/domain/triage/event"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
+)
+
+var (
+	classifierSuccesses = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "ticketlens_classifier_success_total",
+		Help: "Tickets successfully classified by AnalyzeTicketUseCase",
+	})
+	classifierFailures = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "ticketlens_classifier_failure_total",
+		Help: "Ticket classification attempts that failed after adapter retries",
+	})
 )
 
 // TicketConsumer classifies newly created tickets off the event bus.
@@ -48,7 +62,10 @@ func (c *TicketConsumer) handle(ctx context.Context, event events.Event) error {
 
 	if _, err := c.analyzeUC.Execute(ctx, payload.OrganizationID, payload.TicketID); err != nil {
 		// A classification failure must not damage the ticket. It simply stays
-		// unanalyzed and the UI renders latest_analysis as null.
+		// unanalyzed and the UI renders latest_analysis as null. Retries live
+		// inside the HTTP classifier adapter; by the time we are here the
+		// attempt (and any stub fallback) has already been exhausted.
+		classifierFailures.Inc()
 		c.logger.Error("ticket classification failed",
 			"ticket_id", payload.TicketID,
 			"organization_id", payload.OrganizationID,
@@ -57,6 +74,7 @@ func (c *TicketConsumer) handle(ctx context.Context, event events.Event) error {
 		return nil
 	}
 
+	classifierSuccesses.Inc()
 	c.logger.Info("ticket classified", "ticket_id", payload.TicketID)
 	return nil
 }

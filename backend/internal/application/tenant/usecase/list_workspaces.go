@@ -3,10 +3,10 @@ package usecase
 import (
 	"context"
 
-	"github.com/masterfabric-go/masterfabric/internal/application/tenant/dto"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
-	"github.com/masterfabric-go/masterfabric/internal/shared/middleware"
+	"github.com/Root-Emin/TicketLens/internal/application/tenant/dto"
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
+	"github.com/Root-Emin/TicketLens/internal/shared/middleware"
 )
 
 // ListWorkspacesUseCase handles listing workspaces for an organization.

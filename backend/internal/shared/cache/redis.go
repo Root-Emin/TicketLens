@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/masterfabric-go/masterfabric/internal/shared/config"
+	"github.com/Root-Emin/TicketLens/internal/shared/config"
 	"github.com/redis/go-redis/v9"
 )
 

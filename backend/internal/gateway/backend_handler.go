@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/apimanagement/model"
 )
 
 // BackendHandler defines the interface for backend service handlers.

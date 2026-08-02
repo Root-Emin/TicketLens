@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/masterfabric-go/masterfabric/internal/shared/response"
+	"github.com/Root-Emin/TicketLens/internal/shared/response"
 )
 
 // Recoverer recovers from panics and returns a 500 error.

@@ -1,0 +1,23 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.DS_Store
+
+# Trained artefacts and large local corpora
+models/**
+!models/.gitkeep
+data/generated/**
+!data/generated/.gitkeep
+data/splits/**
+!data/splits/.gitkeep
+# Keep small committed eval fixtures; ignore large downloads
+data/eval/ood_raw*
+data/eval/*.parquet
+!data/eval/.gitkeep
+!data/eval/relabel_guide.md
+!data/eval/sample_labeled.csv

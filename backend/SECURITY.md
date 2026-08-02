@@ -52,21 +52,26 @@ Baseline security controls implemented on the `security/hardening` branch (July 
 | SC-10 | HTTP surface | Global request body size cap | `MAX_BODY_BYTES` (default 1 MiB) via `middleware.MaxBodyBytes` | CWE-400 | ✅ Implemented |
 | SC-11 | Observability | Generic readiness probe responses | `internal/infrastructure/http/handler/health/handler.go` — no raw error strings | CWE-209 | ✅ Implemented |
 | SC-12 | Egress | Harden outbound HTTP proxy client | No redirect following, 30s timeout, 1 MiB response cap in `internal/gateway/dynamic_handler.go` | CWE-522 | ✅ Implemented |
-| SC-13 | Authentication | Detect default JWT signing secret | Startup warning in `cmd/server/main.go` when `JWT_SECRET` is unchanged | CWE-798 | ✅ Implemented |
+| SC-13 | Authentication | Refuse to start on default JWT signing secret | `Config.Validate()` aborts startup outside `APP_ENV=development` when `JWT_SECRET` is the shipped default, is shorter than 32 characters, when `DB_PASSWORD` is the compose default, or when `CORS_ALLOWED_ORIGINS` is empty | CWE-798 | ✅ Implemented |
 | SC-14 | Authorization | Enforce RBAC on administrative routes | `RequirePermission` on all `/api/v1` admin routes in `router.go` | CWE-306 | ✅ Implemented |
 | SC-15 | Authorization | Wildcard-aware permission matching | `matchesPermission` in `internal/infrastructure/auth/rbac_service.go` (`*`, `org:*`, `*:read`) | CWE-285 | ✅ Implemented |
 | SC-16 | Input validation | Sanitize migration script names | `scripts/migrate.sh create` — `[a-zA-Z0-9_]` charset only | CWE-22 | ✅ Implemented |
 | SC-17 | Gateway | Suppress internal DB errors in dynamic handler | Generic `"an internal error occurred"` to clients; detail in logs | CWE-209 | ✅ Implemented |
 | SC-18 | Gateway | Document intentional proxy SSRF sink | `#nosec G704` on admin-configured outbound proxy; accepted risk entry below | CWE-918 | ✅ Documented |
 | SC-19 | Verification | Automated vulnerability scanning gate | `govulncheck` clean; `gosec` clean with 2 audited suppressions | — | ✅ Verified |
+| SC-20 | Tenant isolation | Bind a path-addressed organization to the token | `middleware.RequireOrgFromPath` on the `/organizations/{orgId}` subtree; a mismatch answers 404, not 403 | CWE-639 | ✅ Implemented |
+| SC-21 | Tenant isolation | Bind a path-addressed app to the caller's organization | `middleware.RequireAppInOrg` guards the app subtree, including its API keys and endpoints, which resolve by app id alone | CWE-639 | ✅ Implemented |
+| SC-22 | Tenant isolation | Bind a child resource to its parent in the path | `middleware.RequireChildOfPathResource` confirms `{keyId}` and `{endpointId}` belong to `{appId}`; previously a caller could pair an owned app with another tenant's key and revoke it | CWE-639 | ✅ Implemented |
+| SC-23 | Tenant isolation | Make the token authoritative over the tenant header | `middleware.TenantResolverWithWorkspace` reads the JWT claim first and rejects a disagreeing `X-Organization-ID` with 403; the header can no longer establish a tenant on its own | CWE-290 | ✅ Implemented |
+| SC-24 | Information disclosure | Scope user and organization listings to the caller | `ListUsers` uses `UserRepo.ListByOrganization`, `ListOrgs` returns only the caller's organization, and `middleware.RequireUserInOrg` guards user-addressed routes | CWE-200 | ✅ Implemented |
 
 ### Control summary
 
 | Metric | Value |
 | ------ | ----- |
-| Registry version | **v0.1** |
-| Total controls | **19** |
-| Implemented | **18** |
+| Registry version | **v0.2** |
+| Total controls | **24** |
+| Implemented | **23** |
 | Documented accepted risk | **1** (SC-18) |
 | Go toolchain | **1.26.4** |
 | Verification | `go test ./...`, `govulncheck`, `gosec` |
@@ -75,17 +80,24 @@ Baseline security controls implemented on the `security/hardening` branch (July 
 
 | Variable | Purpose | Production guidance |
 | -------- | ------- | ------------------- |
-| `JWT_SECRET` | HS256 signing key | Required; never use the default value |
+| `APP_ENV` | Environment gate for insecure defaults | Set to `staging` or `production`; only `development` tolerates the shipped defaults |
+| `JWT_SECRET` | HS256 signing key | Required, at least 32 characters; startup fails on the default outside development |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated browser origins | Set explicit origins; avoid `*` |
 | `MAX_BODY_BYTES` | Request body cap | Keep at or below gateway policy limits |
 | `DB_SSLMODE` | PostgreSQL TLS mode | Use `require` or stricter |
 | `DB_HOST_BIND` | Compose host bind for Postgres | Keep `127.0.0.1` outside isolated dev machines |
+| `CLASSIFIER_URL` | Python inference base URL | Empty = in-process stub; set in production when serving a trained model |
+| `CLASSIFIER_TIMEOUT_MS` | Per-call HTTP timeout | Default `5000` |
+| `CLASSIFIER_MAX_RETRIES` | HTTP retries before failure/fallback | Default `2` |
+| `CLASSIFIER_FALLBACK_TO_STUB` | Use keyword stub after HTTP exhaustion | Default `true` for resilience; set `false` to fail closed |
+| `CLASSIFIER_REVIEW_THRESHOLD` | Confidence floor for `needs_human_review` | Default `0.60`; recalibrate after training |
 
 ### Security Best Practices
 
-When using masterfabric-go in production:
+When using TicketLens in production:
 
-- Change default `JWT_SECRET` to a strong, random value
+- Set `APP_ENV=production`, which makes the checks below fail-closed at startup instead of advisory
+- Change default `JWT_SECRET` to a strong, random value of at least 32 characters
 - Use SSL/TLS for database connections (`DB_SSLMODE=require`)
 - Set `CORS_ALLOWED_ORIGINS` to explicit trusted origins
 - Enable rate limiting for production workloads via endpoint policies

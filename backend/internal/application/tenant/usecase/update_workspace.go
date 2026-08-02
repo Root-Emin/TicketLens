@@ -2,14 +2,15 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	"github.com/Root-Emin/TicketLens/internal/application/tenant/dto"
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
+	"github.com/Root-Emin/TicketLens/internal/shared/middleware"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/tenant/dto"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
-	"github.com/masterfabric-go/masterfabric/internal/shared/middleware"
 )
 
 // UpdateWorkspaceUseCase handles workspace updates.
@@ -48,7 +49,10 @@ func (uc *UpdateWorkspaceUseCase) Execute(ctx context.Context, workspaceID uuid.
 	if req.Slug != "" {
 		slug := strings.ToLower(strings.TrimSpace(req.Slug))
 		// Check if new slug is taken (excluding current workspace)
-		existing, _ := uc.workspaceRepo.GetBySlug(ctx, orgID, slug)
+		existing, err := uc.workspaceRepo.GetBySlug(ctx, orgID, slug)
+		if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+			return nil, err
+		}
 		if existing != nil && existing.ID != workspaceID {
 			return nil, domainErr.New(domainErr.ErrAlreadyExists, "workspace slug already taken", nil)
 		}

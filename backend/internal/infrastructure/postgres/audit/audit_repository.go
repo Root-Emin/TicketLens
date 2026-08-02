@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/audit/model"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/masterfabric-go/masterfabric/internal/domain/audit/model"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 )
 
 // AuditRepo implements repository.AuditRepository with PostgreSQL.
@@ -93,7 +93,10 @@ func (r *AuditRepo) ListByResource(ctx context.Context, resourceType, resourceID
 	return r.scanLogs(rows, total)
 }
 
-func (r *AuditRepo) scanLogs(rows interface{ Next() bool; Scan(dest ...interface{}) error }, total int) ([]*model.AuditLog, int, error) {
+func (r *AuditRepo) scanLogs(rows interface {
+	Next() bool
+	Scan(dest ...interface{}) error
+}, total int) ([]*model.AuditLog, int, error) {
 	var logs []*model.AuditLog
 	for rows.Next() {
 		var l model.AuditLog

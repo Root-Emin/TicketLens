@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/masterfabric-go/masterfabric/internal/application/iam/dto"
-	iamEvent "github.com/masterfabric-go/masterfabric/internal/domain/iam/event"
-	"github.com/masterfabric-go/masterfabric/internal/domain/iam/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
-	"github.com/masterfabric-go/masterfabric/internal/domain/iam/service"
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
+	"github.com/Root-Emin/TicketLens/internal/application/iam/dto"
+	iamEvent "github.com/Root-Emin/TicketLens/internal/domain/iam/event"
+	"github.com/Root-Emin/TicketLens/internal/domain/iam/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/iam/repository"
+	"github.com/Root-Emin/TicketLens/internal/domain/iam/service"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
 )
 
 // AssignRoleUseCase handles role assignment.

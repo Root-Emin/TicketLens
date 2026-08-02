@@ -6,16 +6,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/application/triage/dto"
+	"github.com/Root-Emin/TicketLens/internal/application/triage/usecase"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
+	"github.com/Root-Emin/TicketLens/internal/shared/middleware"
+	"github.com/Root-Emin/TicketLens/internal/shared/response"
+	"github.com/Root-Emin/TicketLens/internal/shared/validator"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/triage/dto"
-	"github.com/masterfabric-go/masterfabric/internal/application/triage/usecase"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
-	"github.com/masterfabric-go/masterfabric/internal/shared/middleware"
-	"github.com/masterfabric-go/masterfabric/internal/shared/response"
-	"github.com/masterfabric-go/masterfabric/internal/shared/validator"
 )
 
 // Handler provides Triage (ticketing) HTTP handlers.
@@ -41,6 +41,8 @@ type Handler struct {
 	analyzeTicketUC *usecase.AnalyzeTicketUseCase
 
 	statsOverviewUC *usecase.StatsOverviewUseCase
+
+	reviewThreshold float64
 }
 
 // Config holds the handler's use case dependencies.
@@ -66,6 +68,13 @@ type Config struct {
 	AnalyzeTicket *usecase.AnalyzeTicketUseCase
 
 	StatsOverview *usecase.StatsOverviewUseCase
+
+	// ReviewThreshold is CLASSIFIER_REVIEW_THRESHOLD, echoed back on ticket
+	// detail responses. It is a presentation hint, not a domain fact, which is
+	// why it is stamped here rather than threaded through the use cases: the
+	// classifier already decided needs_human_review, and the UI only needs the
+	// number to draw the cutoff line.
+	ReviewThreshold float64
 }
 
 // NewHandler creates a new Triage handler.
@@ -88,7 +97,18 @@ func NewHandler(cfg Config) *Handler {
 		listAnalysesUC:     cfg.ListAnalyses,
 		analyzeTicketUC:    cfg.AnalyzeTicket,
 		statsOverviewUC:    cfg.StatsOverview,
+		reviewThreshold:    cfg.ReviewThreshold,
 	}
+}
+
+// withThreshold stamps the configured review threshold onto a detail response.
+// Every endpoint that returns a TicketDetail goes through here so the field is
+// never silently zero on one route and populated on another.
+func (h *Handler) withThreshold(ticket *dto.TicketDetail) *dto.TicketDetail {
+	if ticket != nil {
+		ticket.ReviewThreshold = h.reviewThreshold
+	}
+	return ticket
 }
 
 // ─── Departments ─────────────────────────────────────────────────────────────
@@ -249,7 +269,7 @@ func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, err)
 		return
 	}
-	response.Created(w, ticket)
+	response.Created(w, h.withThreshold(ticket))
 }
 
 // ListTickets serves the filtered ticket queue.
@@ -291,7 +311,7 @@ func (h *Handler) GetTicket(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, err)
 		return
 	}
-	response.JSON(w, http.StatusOK, ticket)
+	response.JSON(w, http.StatusOK, h.withThreshold(ticket))
 }
 
 // UpdateTicket patches priority, department and/or status.
@@ -317,7 +337,7 @@ func (h *Handler) UpdateTicket(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, err)
 		return
 	}
-	response.JSON(w, http.StatusOK, ticket)
+	response.JSON(w, http.StatusOK, h.withThreshold(ticket))
 }
 
 // AssignTicket sets or clears a ticket's assignee.
@@ -342,7 +362,7 @@ func (h *Handler) AssignTicket(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, err)
 		return
 	}
-	response.JSON(w, http.StatusOK, ticket)
+	response.JSON(w, http.StatusOK, h.withThreshold(ticket))
 }
 
 // ─── Messages ────────────────────────────────────────────────────────────────
@@ -434,7 +454,7 @@ func (h *Handler) RerunAnalysis(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, err)
 		return
 	}
-	response.Created(w, ticket)
+	response.Created(w, h.withThreshold(ticket))
 }
 
 // ─── Stats ───────────────────────────────────────────────────────────────────

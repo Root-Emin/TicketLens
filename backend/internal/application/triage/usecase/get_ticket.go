@@ -3,10 +3,10 @@ package usecase
 import (
 	"context"
 
+	"github.com/Root-Emin/TicketLens/internal/application/triage/dto"
+	iamRepo "github.com/Root-Emin/TicketLens/internal/domain/iam/repository"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/triage/dto"
-	iamRepo "github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
 )
 
 // GetTicketUseCase returns one ticket with its thread and analysis history.

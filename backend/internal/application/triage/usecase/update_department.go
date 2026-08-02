@@ -2,13 +2,14 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	"github.com/Root-Emin/TicketLens/internal/application/triage/dto"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/triage/dto"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 )
 
 // UpdateDepartmentUseCase handles department updates.
@@ -38,7 +39,11 @@ func (uc *UpdateDepartmentUseCase) Execute(ctx context.Context, orgID, departmen
 		if name == "" {
 			return nil, domainErr.New(domainErr.ErrValidation, "name cannot be empty", nil)
 		}
-		if existing, _ := uc.departmentRepo.GetByName(ctx, orgID, name); existing != nil && existing.ID != departmentID {
+		existing, err := uc.departmentRepo.GetByName(ctx, orgID, name)
+		if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+			return nil, err
+		}
+		if existing != nil && existing.ID != departmentID {
 			return nil, domainErr.New(domainErr.ErrAlreadyExists, "department name already taken in this organization", nil)
 		}
 		department.Name = name
@@ -57,7 +62,11 @@ func (uc *UpdateDepartmentUseCase) Execute(ctx context.Context, orgID, departmen
 			if !model.ValidCategory(category) {
 				return nil, domainErr.New(domainErr.ErrValidation, "unknown category: "+*req.Category, nil)
 			}
-			if taken, _ := uc.departmentRepo.GetByCategory(ctx, orgID, category); taken != nil && taken.ID != departmentID {
+			taken, err := uc.departmentRepo.GetByCategory(ctx, orgID, category)
+			if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+				return nil, err
+			}
+			if taken != nil && taken.ID != departmentID {
 				return nil, domainErr.New(domainErr.ErrAlreadyExists,
 					"another department already handles category "+*req.Category, nil)
 			}

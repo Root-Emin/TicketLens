@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/stretchr/testify/assert"
 )
 

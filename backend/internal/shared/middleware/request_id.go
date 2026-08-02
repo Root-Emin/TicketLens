@@ -3,8 +3,8 @@ package middleware
 import (
 	"net/http"
 
+	"github.com/Root-Emin/TicketLens/internal/shared/logger"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/shared/logger"
 )
 
 const RequestIDHeader = "X-Request-ID"

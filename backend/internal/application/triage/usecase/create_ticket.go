@@ -5,13 +5,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/application/triage/dto"
+	iamRepo "github.com/Root-Emin/TicketLens/internal/domain/iam/repository"
+	triageEvent "github.com/Root-Emin/TicketLens/internal/domain/triage/event"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/triage/dto"
-	iamRepo "github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
-	triageEvent "github.com/masterfabric-go/masterfabric/internal/domain/triage/event"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
 )
 
 // CreateTicketUseCase raises a ticket together with its first message.
@@ -20,6 +20,7 @@ type CreateTicketUseCase struct {
 	messageRepo    repository.TicketMessageRepository
 	customerRepo   repository.CustomerRepository
 	departmentRepo repository.DepartmentRepository
+	txManager      repository.TxManager
 	eventBus       events.EventBus
 	assembler      *ticketAssembler
 }
@@ -32,6 +33,7 @@ func NewCreateTicketUseCase(
 	departmentRepo repository.DepartmentRepository,
 	analysisRepo repository.AIAnalysisRepository,
 	userRepo iamRepo.UserRepository,
+	txManager repository.TxManager,
 	eventBus events.EventBus,
 ) *CreateTicketUseCase {
 	return &CreateTicketUseCase{
@@ -39,6 +41,7 @@ func NewCreateTicketUseCase(
 		messageRepo:    messageRepo,
 		customerRepo:   customerRepo,
 		departmentRepo: departmentRepo,
+		txManager:      txManager,
 		eventBus:       eventBus,
 		assembler:      newTicketAssembler(departmentRepo, customerRepo, messageRepo, analysisRepo, userRepo),
 	}
@@ -51,9 +54,8 @@ func NewCreateTicketUseCase(
 // the default department at normal priority and stays there until the first
 // analysis arrives.
 //
-// NOTE: the ticket and its first message are two statements without an
-// enclosing transaction — the repository interfaces expose no transaction
-// handle. A failure between them leaves a ticket with no description.
+// The ticket and its first message are written inside one transaction, so a
+// failure on the second write can no longer leave a ticket with no description.
 func (uc *CreateTicketUseCase) Execute(ctx context.Context, orgID uuid.UUID, req dto.CreateTicketRequest) (*dto.TicketDetail, error) {
 	// Resolving through the org-scoped repository is what stops an agent from
 	// attaching a ticket to another tenant's customer: this returns not-found.
@@ -75,9 +77,6 @@ func (uc *CreateTicketUseCase) Execute(ctx context.Context, orgID uuid.UUID, req
 		Status:         model.TicketStatusOpen,
 		Priority:       model.TicketPriorityNormal,
 	}
-	if err := uc.ticketRepo.Create(ctx, ticket); err != nil {
-		return nil, err
-	}
 
 	// The first message is the ticket's description; there is no description
 	// column on tickets.
@@ -90,7 +89,17 @@ func (uc *CreateTicketUseCase) Execute(ctx context.Context, orgID uuid.UUID, req
 		Body:           req.Body,
 		IsInternal:     false,
 	}
-	if err := uc.messageRepo.Create(ctx, message); err != nil {
+
+	if err := uc.txManager.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := uc.ticketRepo.Create(txCtx, ticket); err != nil {
+			return err
+		}
+		// message.TicketID is set here rather than above because ticketRepo.Create
+		// assigns the id; the two writes share one transaction so this ordering is
+		// safe.
+		message.TicketID = ticket.ID
+		return uc.messageRepo.Create(txCtx, message)
+	}); err != nil {
 		return nil, err
 	}
 

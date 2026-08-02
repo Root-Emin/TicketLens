@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/realtime/model"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/realtime/model"
 )
 
 // ClientInfo holds metadata for a connected WebSocket client.

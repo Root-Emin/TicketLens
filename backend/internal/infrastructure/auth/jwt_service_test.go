@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/iam/service"
+	"github.com/Root-Emin/TicketLens/internal/shared/config"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/iam/service"
-	"github.com/masterfabric-go/masterfabric/internal/shared/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

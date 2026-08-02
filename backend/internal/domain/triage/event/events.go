@@ -36,3 +36,16 @@ type TicketAssigned struct {
 	AssigneeID     *uuid.UUID `json:"assignee_id,omitempty"`
 	Timestamp      time.Time  `json:"timestamp"`
 }
+
+// AnalysisCompleted is emitted after a classifier run is persisted.
+//
+// Frontends subscribe via WebSocket to refresh the AI panel without polling.
+type AnalysisCompleted struct {
+	TicketID         uuid.UUID `json:"ticket_id"`
+	OrganizationID   uuid.UUID `json:"organization_id"`
+	AnalysisID       uuid.UUID `json:"analysis_id"`
+	NeedsHumanReview bool      `json:"needs_human_review"`
+	ModelName        string    `json:"model_name"`
+	ModelVersion     string    `json:"model_version"`
+	Timestamp        time.Time `json:"timestamp"`
+}

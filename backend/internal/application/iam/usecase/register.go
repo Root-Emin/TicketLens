@@ -2,15 +2,16 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	"github.com/masterfabric-go/masterfabric/internal/application/iam/dto"
-	iamEvent "github.com/masterfabric-go/masterfabric/internal/domain/iam/event"
-	"github.com/masterfabric-go/masterfabric/internal/domain/iam/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
-	"github.com/masterfabric-go/masterfabric/internal/domain/iam/service"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
+	"github.com/Root-Emin/TicketLens/internal/application/iam/dto"
+	iamEvent "github.com/Root-Emin/TicketLens/internal/domain/iam/event"
+	"github.com/Root-Emin/TicketLens/internal/domain/iam/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/iam/repository"
+	"github.com/Root-Emin/TicketLens/internal/domain/iam/service"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
 )
 
 // RegisterUseCase handles user registration.
@@ -27,8 +28,13 @@ func NewRegisterUseCase(userRepo repository.UserRepository, auth service.AuthSer
 
 // Execute registers a new user.
 func (uc *RegisterUseCase) Execute(ctx context.Context, req dto.RegisterRequest) (*dto.UserInfo, error) {
-	// Check if user already exists
-	existing, _ := uc.userRepo.GetByEmail(ctx, req.Email)
+	// Check if user already exists. A lookup error other than not-found is a
+	// real failure and must not be read as "free to register": swallowing it
+	// would let a transient database fault create a duplicate account.
+	existing, err := uc.userRepo.GetByEmail(ctx, req.Email)
+	if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+		return nil, err
+	}
 	if existing != nil {
 		return nil, domainErr.New(domainErr.ErrAlreadyExists, "user with this email already exists", nil)
 	}

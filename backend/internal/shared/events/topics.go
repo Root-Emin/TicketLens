@@ -39,7 +39,8 @@ const (
 	EventTypeEndpointRetired = "endpoint.retired"
 
 	// Triage
-	EventTypeTicketCreated  = "ticket.created"
-	EventTypeTicketUpdated  = "ticket.updated"
-	EventTypeTicketAssigned = "ticket.assigned"
+	EventTypeTicketCreated     = "ticket.created"
+	EventTypeTicketUpdated     = "ticket.updated"
+	EventTypeTicketAssigned    = "ticket.assigned"
+	EventTypeAnalysisCompleted = "analysis.completed"
 )

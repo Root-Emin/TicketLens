@@ -2,17 +2,18 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/application/tenant/dto"
+	tenantEvent "github.com/Root-Emin/TicketLens/internal/domain/tenant/event"
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
+	"github.com/Root-Emin/TicketLens/internal/shared/middleware"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/tenant/dto"
-	tenantEvent "github.com/masterfabric-go/masterfabric/internal/domain/tenant/event"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
-	"github.com/masterfabric-go/masterfabric/internal/shared/middleware"
 )
 
 // CreateWorkspaceUseCase handles workspace creation.
@@ -57,7 +58,10 @@ func (uc *CreateWorkspaceUseCase) Execute(ctx context.Context, req dto.CreateWor
 	slug := strings.ToLower(strings.TrimSpace(req.Slug))
 
 	// Check if slug is taken within the organization
-	existing, _ := uc.workspaceRepo.GetBySlug(ctx, orgID, slug)
+	existing, err := uc.workspaceRepo.GetBySlug(ctx, orgID, slug)
+	if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+		return nil, err
+	}
 	if existing != nil {
 		return nil, domainErr.New(domainErr.ErrAlreadyExists, "workspace slug already taken in this organization", nil)
 	}

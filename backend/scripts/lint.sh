@@ -20,19 +20,24 @@ fi
 
 echo "🔍 Running linters..."
 
-# Format check
+# Format check.
+#
+# Capture the file list instead of piping into `grep -q`: under `set -o pipefail`
+# grep's early exit sends SIGPIPE to gofmt, so the pipeline reports failure even
+# when every file is formatted. Assigning to a variable keeps the test on the
+# output itself, which is what we actually care about.
 echo "  📝 Checking formatting..."
-if ! gofmt -l . | grep -q .; then
-    if [[ "$FIX" == true ]]; then
-        echo "    Fixing formatting..."
-        gofmt -w .
-        echo "    ✅ Formatting fixed"
-    else
-        echo "    ❌ Code is not formatted. Run: gofmt -w ."
-        exit 1
-    fi
-else
+unformatted="$(gofmt -l .)"
+if [[ -z "$unformatted" ]]; then
     echo "    ✅ Code is formatted"
+elif [[ "$FIX" == true ]]; then
+    echo "    Fixing formatting..."
+    gofmt -w .
+    echo "    ✅ Formatting fixed"
+else
+    echo "    ❌ Code is not formatted. Run: gofmt -w ."
+    echo "$unformatted" | sed 's/^/       /'
+    exit 1
 fi
 
 # Vet check

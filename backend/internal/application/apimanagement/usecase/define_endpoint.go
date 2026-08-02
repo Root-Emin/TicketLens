@@ -2,15 +2,16 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/application/apimanagement/dto"
+	apimgmtEvent "github.com/Root-Emin/TicketLens/internal/domain/apimanagement/event"
+	"github.com/Root-Emin/TicketLens/internal/domain/apimanagement/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/apimanagement/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/apimanagement/dto"
-	apimgmtEvent "github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/event"
-	"github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
 )
 
 // DefineEndpointUseCase handles endpoint creation.
@@ -32,7 +33,10 @@ func (uc *DefineEndpointUseCase) Execute(ctx context.Context, appID uuid.UUID, r
 	}
 
 	// Check for duplicates
-	existing, _ := uc.endpointRepo.GetByMethodPath(ctx, appID, req.Method, req.Path, version)
+	existing, err := uc.endpointRepo.GetByMethodPath(ctx, appID, req.Method, req.Path, version)
+	if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+		return nil, err
+	}
 	if existing != nil {
 		return nil, domainErr.New(domainErr.ErrAlreadyExists, "endpoint already exists for this method/path/version", nil)
 	}

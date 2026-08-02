@@ -2,20 +2,21 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/application/tenant/dto"
+	iamModel "github.com/Root-Emin/TicketLens/internal/domain/iam/model"
+	iamRepo "github.com/Root-Emin/TicketLens/internal/domain/iam/repository"
+	tenantEvent "github.com/Root-Emin/TicketLens/internal/domain/tenant/event"
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/repository"
+	triageModel "github.com/Root-Emin/TicketLens/internal/domain/triage/model"
+	triageRepo "github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
+	"github.com/Root-Emin/TicketLens/internal/shared/middleware"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/tenant/dto"
-	iamModel "github.com/masterfabric-go/masterfabric/internal/domain/iam/model"
-	iamRepo "github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
-	tenantEvent "github.com/masterfabric-go/masterfabric/internal/domain/tenant/event"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/repository"
-	triageModel "github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
-	triageRepo "github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
-	"github.com/masterfabric-go/masterfabric/internal/shared/middleware"
 )
 
 // ownerRoleName is the seeded role granted to whoever creates an organization.
@@ -30,7 +31,7 @@ const ownerRoleName = "admin"
 //
 // It deliberately carries no category: categories route predictions, and the
 // default department is the destination for everything that routes nowhere.
-const defaultDepartmentName = "Genel"
+const defaultDepartmentName = "General"
 
 // CreateOrgUseCase handles organization creation.
 type CreateOrgUseCase struct {
@@ -57,8 +58,13 @@ func NewCreateOrgUseCase(
 
 // Execute creates a new organization.
 func (uc *CreateOrgUseCase) Execute(ctx context.Context, req dto.CreateOrgRequest) (*dto.OrgInfo, error) {
-	// Check if slug is taken
-	existing, _ := uc.orgRepo.GetBySlug(ctx, req.Slug)
+	// Check if slug is taken. A lookup error other than not-found is a real
+	// failure; treating it as "slug free" would let a transient fault create a
+	// second organization on a slug that is meant to be unique.
+	existing, err := uc.orgRepo.GetBySlug(ctx, req.Slug)
+	if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+		return nil, err
+	}
 	if existing != nil {
 		return nil, domainErr.New(domainErr.ErrAlreadyExists, "organization slug already taken", nil)
 	}
@@ -87,7 +93,7 @@ func (uc *CreateOrgUseCase) Execute(ctx context.Context, req dto.CreateOrgReques
 	if err := uc.departmentRepo.Create(ctx, &triageModel.Department{
 		OrganizationID: org.ID,
 		Name:           defaultDepartmentName,
-		Description:    "Sınıflandırılmamış talepler için varsayılan departman",
+		Description:    "Default department for unclassified requests",
 		Category:       nil,
 		IsDefault:      true,
 	}); err != nil {

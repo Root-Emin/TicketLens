@@ -2,8 +2,10 @@ package events
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 )
 
 // InProcessBus is an in-memory event bus using Go channels.
@@ -40,14 +42,38 @@ func NewInProcessBus(logger *slog.Logger, bufferSize int) *InProcessBus {
 	return b
 }
 
+// publishTimeout bounds how long Publish waits for room in the buffer.
+//
+// A dropped event is not a cosmetic loss: ticket.created is what triggers
+// classification, so a drop leaves a ticket permanently unanalyzed with nothing
+// recording why. Waiting briefly absorbs bursts, which is what a full buffer
+// almost always is. The bound keeps a stalled dispatcher from blocking the
+// request that is publishing.
+const publishTimeout = 5 * time.Second
+
 // Publish sends an event to all registered handlers asynchronously.
+//
+// It returns an error when the event could not be queued. Callers that ignore
+// the error accept the loss; they no longer do so unknowingly.
 func (b *InProcessBus) Publish(ctx context.Context, topic string, event Event) error {
+	envelope := inProcessEnvelope{ctx: ctx, topic: topic, event: event}
+
 	select {
-	case b.ch <- inProcessEnvelope{ctx: ctx, topic: topic, event: event}:
+	case b.ch <- envelope:
 		return nil
 	default:
-		b.logger.Warn("in-process event bus buffer full, dropping event", "topic", topic)
+	}
+
+	timer := time.NewTimer(publishTimeout)
+	defer timer.Stop()
+
+	select {
+	case b.ch <- envelope:
 		return nil
+	case <-timer.C:
+		b.logger.Error("in-process event bus buffer full, event dropped",
+			"topic", topic, "waited", publishTimeout)
+		return fmt.Errorf("in-process event bus buffer full: dropped event on topic %q", topic)
 	}
 }
 

@@ -3,11 +3,11 @@ package audit
 import (
 	"net/http"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/audit/repository"
+	"github.com/Root-Emin/TicketLens/internal/shared/pagination"
+	"github.com/Root-Emin/TicketLens/internal/shared/response"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/audit/repository"
-	"github.com/masterfabric-go/masterfabric/internal/shared/pagination"
-	"github.com/masterfabric-go/masterfabric/internal/shared/response"
 )
 
 // Handler provides Audit HTTP handlers.

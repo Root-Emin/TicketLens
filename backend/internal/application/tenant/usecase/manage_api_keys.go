@@ -7,10 +7,10 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/Root-Emin/TicketLens/internal/application/tenant/dto"
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/tenant/repository"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/tenant/dto"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/tenant/repository"
 )
 
 // ManageAPIKeysUseCase handles API key management.

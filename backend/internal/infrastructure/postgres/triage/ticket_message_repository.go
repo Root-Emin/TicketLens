@@ -5,12 +5,13 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
+	"github.com/Root-Emin/TicketLens/internal/shared/database"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 )
 
 const ticketMessageColumns = `id, organization_id, ticket_id, author_type, author_id,
@@ -35,7 +36,7 @@ func (r *TicketMessageRepo) Create(ctx context.Context, message *model.TicketMes
 	}
 	message.CreatedAt = time.Now().UTC()
 
-	_, err := r.db.Exec(ctx,
+	_, err := database.Querier(ctx, r.db).Exec(ctx,
 		`INSERT INTO ticket_messages (id, organization_id, ticket_id, author_type, author_id,
 			body, is_internal, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	mflogger "github.com/masterfabric-go/masterfabric/internal/shared/logger"
+	mflogger "github.com/Root-Emin/TicketLens/internal/shared/logger"
 )
 
 // responseWriter wraps http.ResponseWriter to capture the status code.

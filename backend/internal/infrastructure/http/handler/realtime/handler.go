@@ -6,15 +6,15 @@ import (
 	"log/slog"
 	"net/http"
 
+	realtimeUC "github.com/Root-Emin/TicketLens/internal/application/realtime/usecase"
+	iamService "github.com/Root-Emin/TicketLens/internal/domain/iam/service"
+	"github.com/Root-Emin/TicketLens/internal/domain/realtime/model"
+	realtimeService "github.com/Root-Emin/TicketLens/internal/domain/realtime/service"
+	infraWS "github.com/Root-Emin/TicketLens/internal/infrastructure/websocket"
+	"github.com/Root-Emin/TicketLens/internal/shared/middleware"
+	"github.com/Root-Emin/TicketLens/internal/shared/response"
 	"github.com/google/uuid"
 	gorillaws "github.com/gorilla/websocket"
-	realtimeUC "github.com/masterfabric-go/masterfabric/internal/application/realtime/usecase"
-	iamService "github.com/masterfabric-go/masterfabric/internal/domain/iam/service"
-	"github.com/masterfabric-go/masterfabric/internal/domain/realtime/model"
-	realtimeService "github.com/masterfabric-go/masterfabric/internal/domain/realtime/service"
-	infraWS "github.com/masterfabric-go/masterfabric/internal/infrastructure/websocket"
-	"github.com/masterfabric-go/masterfabric/internal/shared/middleware"
-	"github.com/masterfabric-go/masterfabric/internal/shared/response"
 )
 
 // Handler handles WebSocket upgrade requests.
@@ -30,13 +30,13 @@ type Handler struct {
 
 // Config holds handler dependencies.
 type Config struct {
-	ValidateUC     *realtimeUC.ValidateConnectUseCase
-	AuthService    iamService.AuthService
-	Hub            *infraWS.Hub
-	Upgrader       gorillaws.Upgrader
-	PingInterval   int
-	Logger         *slog.Logger
-	Enabled        bool
+	ValidateUC   *realtimeUC.ValidateConnectUseCase
+	AuthService  iamService.AuthService
+	Hub          *infraWS.Hub
+	Upgrader     gorillaws.Upgrader
+	PingInterval int
+	Logger       *slog.Logger
+	Enabled      bool
 }
 
 // NewHandler creates a new WebSocket handler.

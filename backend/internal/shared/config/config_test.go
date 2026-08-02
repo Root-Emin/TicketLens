@@ -75,3 +75,59 @@ func TestRedisConfig_Addr(t *testing.T) {
 	cfg := RedisConfig{Host: "redis.local", Port: 6380}
 	assert.Equal(t, "redis.local:6380", cfg.Addr())
 }
+
+// A deployment that boots with the shipped defaults would sign tokens anybody
+// can forge, so Validate is what turns that into a failed start instead.
+
+func productionConfig() *Config {
+	return &Config{
+		Env:      EnvProduction,
+		Server:   ServerConfig{CORSAllowedOrigins: []string{"https://app.example.com"}},
+		Database: DatabaseConfig{Password: "a-real-database-password"},
+		JWT:      JWTConfig{Secret: "0123456789abcdef0123456789abcdef"},
+	}
+}
+
+func TestValidate_DevelopmentToleratesDefaults(t *testing.T) {
+	// ./start.sh has no environment file; local development must keep working.
+	t.Setenv("APP_ENV", "")
+	cfg := Load()
+
+	assert.Equal(t, EnvDevelopment, cfg.Env)
+	assert.True(t, cfg.IsDevelopment())
+	assert.NoError(t, cfg.Validate())
+}
+
+func TestValidate_ProductionAcceptsRealSecrets(t *testing.T) {
+	assert.NoError(t, productionConfig().Validate())
+}
+
+func TestValidate_ProductionRejectsUnsafeDefaults(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Config)
+	}{
+		{"default jwt secret", func(c *Config) { c.JWT.Secret = InsecureJWTSecret }},
+		{"short jwt secret", func(c *Config) { c.JWT.Secret = "too-short" }},
+		{"default database password", func(c *Config) { c.Database.Password = defaultDBPassword }},
+		{"wildcard cors", func(c *Config) { c.Server.CORSAllowedOrigins = nil }},
+		{"unknown environment", func(c *Config) { c.Env = "prod" }},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := productionConfig()
+			tc.mutate(cfg)
+			assert.Error(t, cfg.Validate())
+		})
+	}
+}
+
+func TestValidate_StagingIsHeldToTheSameStandard(t *testing.T) {
+	cfg := productionConfig()
+	cfg.Env = EnvStaging
+	assert.NoError(t, cfg.Validate())
+
+	cfg.JWT.Secret = InsecureJWTSecret
+	assert.Error(t, cfg.Validate())
+}

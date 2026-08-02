@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strings"
 
+	tenantRepo "github.com/Root-Emin/TicketLens/internal/domain/tenant/repository"
+	"github.com/Root-Emin/TicketLens/internal/shared/logger"
+	"github.com/Root-Emin/TicketLens/internal/shared/response"
 	"github.com/google/uuid"
-	tenantRepo "github.com/masterfabric-go/masterfabric/internal/domain/tenant/repository"
-	"github.com/masterfabric-go/masterfabric/internal/shared/logger"
-	"github.com/masterfabric-go/masterfabric/internal/shared/response"
 )
 
 const (
@@ -18,33 +18,41 @@ const (
 )
 
 // TenantResolver resolves the tenant (organization) and optionally workspace from the request.
-// Resolution order: X-Organization-ID header > JWT claims > subdomain.
+// Resolution order: JWT claims > subdomain. X-Organization-ID may only confirm
+// the JWT claim, never replace it.
 // Workspace resolution: X-Workspace-ID header > X-Workspace-Slug header (requires org context).
 func TenantResolver(orgRepo tenantRepo.OrgRepository) func(http.Handler) http.Handler {
 	return TenantResolverWithWorkspace(orgRepo, nil)
 }
 
 // TenantResolverWithWorkspace resolves tenant and workspace from the request.
+//
+// The JWT claim is authoritative. X-Organization-ID used to be checked first,
+// which let any authenticated caller adopt another tenant's context simply by
+// naming its id; the header is now only honored when it agrees with the token,
+// where it serves as an explicitness aid rather than a privilege.
 func TenantResolverWithWorkspace(orgRepo tenantRepo.OrgRepository, workspaceRepo tenantRepo.WorkspaceRepository) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 			var orgID uuid.UUID
 
-			// 1. Check explicit header
+			// 1. JWT claims (if auth middleware already ran)
+			if claimOrgID, ok := ctx.Value(ContextKeyOrganizationID).(uuid.UUID); ok && claimOrgID != uuid.Nil {
+				orgID = claimOrgID
+			}
+
+			// 2. An explicit header must agree with the token.
 			if header := r.Header.Get("X-Organization-ID"); header != "" {
 				parsed, err := uuid.Parse(header)
 				if err != nil {
 					response.JSON(w, http.StatusBadRequest, map[string]string{"error": "invalid X-Organization-ID"})
 					return
 				}
-				orgID = parsed
-			}
-
-			// 2. Fall back to JWT claims (if auth middleware already ran)
-			if orgID == uuid.Nil {
-				if claimOrgID, ok := ctx.Value(ContextKeyOrganizationID).(uuid.UUID); ok && claimOrgID != uuid.Nil {
-					orgID = claimOrgID
+				if orgID != uuid.Nil && parsed != orgID {
+					response.JSON(w, http.StatusForbidden,
+						map[string]string{"error": "X-Organization-ID does not match the authenticated organization"})
+					return
 				}
 			}
 

@@ -2,13 +2,14 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	"github.com/Root-Emin/TicketLens/internal/application/triage/dto"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/model"
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/repository"
+	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/triage/dto"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/repository"
-	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 )
 
 // CreateCustomerUseCase handles customer creation.
@@ -25,7 +26,11 @@ func NewCreateCustomerUseCase(customerRepo repository.CustomerRepository) *Creat
 func (uc *CreateCustomerUseCase) Execute(ctx context.Context, orgID uuid.UUID, req dto.CreateCustomerRequest) (*dto.CustomerInfo, error) {
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 
-	if existing, _ := uc.customerRepo.GetByEmail(ctx, orgID, email); existing != nil {
+	existing, err := uc.customerRepo.GetByEmail(ctx, orgID, email)
+	if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+		return nil, err
+	}
+	if existing != nil {
 		return nil, domainErr.New(domainErr.ErrAlreadyExists, "customer with this email already exists in this organization", nil)
 	}
 

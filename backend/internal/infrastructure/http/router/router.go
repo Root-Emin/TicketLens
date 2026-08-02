@@ -1,32 +1,36 @@
 package router
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 
 	// Handlers
-	apimgmtHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/apimanagement"
-	auditHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/audit"
-	"github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/health"
-	iamHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/iam"
-	realtimeHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/realtime"
-	tenantHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/tenant"
-	triageHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/triage"
+	apimgmtHandler "github.com/Root-Emin/TicketLens/internal/infrastructure/http/handler/apimanagement"
+	auditHandler "github.com/Root-Emin/TicketLens/internal/infrastructure/http/handler/audit"
+	"github.com/Root-Emin/TicketLens/internal/infrastructure/http/handler/health"
+	iamHandler "github.com/Root-Emin/TicketLens/internal/infrastructure/http/handler/iam"
+	realtimeHandler "github.com/Root-Emin/TicketLens/internal/infrastructure/http/handler/realtime"
+	tenantHandler "github.com/Root-Emin/TicketLens/internal/infrastructure/http/handler/tenant"
+	triageHandler "github.com/Root-Emin/TicketLens/internal/infrastructure/http/handler/triage"
 
 	// Services & middleware
-	iamService "github.com/masterfabric-go/masterfabric/internal/domain/iam/service"
-	"github.com/masterfabric-go/masterfabric/internal/gateway"
-	"github.com/masterfabric-go/masterfabric/internal/shared/middleware"
+	iamService "github.com/Root-Emin/TicketLens/internal/domain/iam/service"
+	"github.com/Root-Emin/TicketLens/internal/gateway"
+	"github.com/Root-Emin/TicketLens/internal/shared/middleware"
 
-	// Repositories (for tenant resolver middleware)
-	tenantRepo "github.com/masterfabric-go/masterfabric/internal/domain/tenant/repository"
+	// Repositories (for tenant resolver and scope middleware)
+	apimgmtRepo "github.com/Root-Emin/TicketLens/internal/domain/apimanagement/repository"
+	iamRepo "github.com/Root-Emin/TicketLens/internal/domain/iam/repository"
+	tenantRepo "github.com/Root-Emin/TicketLens/internal/domain/tenant/repository"
 )
 
 func maybeRequirePermission(rbac iamService.RBACService, permission string) func(http.Handler) http.Handler {
@@ -68,8 +72,71 @@ type Dependencies struct {
 	GatewayPipeline *gateway.Pipeline
 
 	// Repos needed for middleware
-	OrgRepo        tenantRepo.OrgRepository
-	WorkspaceRepo  tenantRepo.WorkspaceRepository
+	OrgRepo       tenantRepo.OrgRepository
+	WorkspaceRepo tenantRepo.WorkspaceRepository
+	AppRepo       tenantRepo.AppRepository
+	APIKeyRepo    tenantRepo.APIKeyRepository
+	RoleRepo      iamRepo.RoleRepository
+	EndpointRepo  apimgmtRepo.EndpointRepository
+}
+
+// requireOrgFromPath guards a path-addressed organization, degrading to a no-op
+// when auth is disabled (no AuthService) since there is no claim to compare.
+func maybeRequireOrgFromPath(deps Dependencies, param string) func(http.Handler) http.Handler {
+	if deps.AuthService == nil {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return middleware.RequireOrgFromPath(param)
+}
+
+func maybeRequireAppInOrg(deps Dependencies, param string) func(http.Handler) http.Handler {
+	if deps.AuthService == nil || deps.AppRepo == nil {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return middleware.RequireAppInOrg(deps.AppRepo, param)
+}
+
+func maybeRequireUserInOrg(deps Dependencies, param string) func(http.Handler) http.Handler {
+	if deps.AuthService == nil || deps.RoleRepo == nil {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return middleware.RequireUserInOrg(deps.RoleRepo, param)
+}
+
+// maybeRequireKeyInApp keeps an API key id from being paired with somebody
+// else's app id in the path.
+func maybeRequireKeyInApp(deps Dependencies) func(http.Handler) http.Handler {
+	if deps.AuthService == nil || deps.APIKeyRepo == nil {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return middleware.RequireChildOfPathResource(
+		func(ctx context.Context, keyID uuid.UUID) (uuid.UUID, error) {
+			key, err := deps.APIKeyRepo.GetByID(ctx, keyID)
+			if err != nil {
+				return uuid.Nil, err
+			}
+			return key.AppID, nil
+		},
+		"appId", "keyId", "api key",
+	)
+}
+
+// maybeRequireEndpointInApp does the same for endpoint ids, which also carry
+// their policies.
+func maybeRequireEndpointInApp(deps Dependencies) func(http.Handler) http.Handler {
+	if deps.AuthService == nil || deps.EndpointRepo == nil {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return middleware.RequireChildOfPathResource(
+		func(ctx context.Context, endpointID uuid.UUID) (uuid.UUID, error) {
+			endpoint, err := deps.EndpointRepo.GetByID(ctx, endpointID)
+			if err != nil {
+				return uuid.Nil, err
+			}
+			return endpoint.AppID, nil
+		},
+		"appId", "endpointId", "endpoint",
+	)
 }
 
 // New creates the root Chi router with all middleware and routes.
@@ -134,7 +201,10 @@ func New(deps Dependencies) *chi.Mux {
 				r.Get("/me", deps.IAMHandler.GetMe)
 				r.With(maybeRequirePermission(deps.RBACService, "user:read")).Route("/users", func(r chi.Router) {
 					r.Get("/", deps.IAMHandler.ListUsers)
-					r.Get("/{id}", deps.IAMHandler.GetUser)
+					// A single user is only readable through a membership in the
+					// caller's organization; the handler looks users up by id
+					// alone and would otherwise serve any account on the platform.
+					r.With(maybeRequireUserInOrg(deps, "id")).Get("/{id}", deps.IAMHandler.GetUser)
 				})
 				r.With(maybeRequirePermission(deps.RBACService, "user:write")).Post("/roles/assign", deps.IAMHandler.AssignRole)
 			}
@@ -148,6 +218,11 @@ func New(deps Dependencies) *chi.Mux {
 					r.Post("/", deps.TenantHandler.CreateOrg)
 					r.With(maybeRequirePermission(deps.RBACService, "org:read")).Get("/", deps.TenantHandler.ListOrgs)
 					r.Route("/{orgId}", func(r chi.Router) {
+						// A permission is granted within an organization, so it
+						// cannot by itself justify reading the organization named
+						// in the path. Everything below is the caller's own org.
+						r.Use(maybeRequireOrgFromPath(deps, "orgId"))
+
 						r.With(maybeRequirePermission(deps.RBACService, "org:read")).Get("/", deps.TenantHandler.GetOrg)
 
 						// Apps under organization
@@ -155,13 +230,21 @@ func New(deps Dependencies) *chi.Mux {
 							r.With(maybeRequirePermission(deps.RBACService, "app:write")).Post("/", deps.TenantHandler.CreateApp)
 							r.With(maybeRequirePermission(deps.RBACService, "app:read")).Get("/", deps.TenantHandler.ListApps)
 							r.Route("/{appId}", func(r chi.Router) {
+								// Guards the API key and endpoint subtrees too:
+								// those handlers resolve by app id alone.
+								r.Use(maybeRequireAppInOrg(deps, "appId"))
+
 								r.With(maybeRequirePermission(deps.RBACService, "app:read")).Get("/", deps.TenantHandler.GetApp)
 
 								// API keys under app
 								r.Route("/keys", func(r chi.Router) {
 									r.With(maybeRequirePermission(deps.RBACService, "app:write")).Post("/", deps.TenantHandler.CreateAPIKey)
 									r.With(maybeRequirePermission(deps.RBACService, "app:read")).Get("/", deps.TenantHandler.ListAPIKeys)
-									r.With(maybeRequirePermission(deps.RBACService, "app:write")).Delete("/{keyId}", deps.TenantHandler.RevokeAPIKey)
+									// RevokeAPIKey resolves the key by id alone, so the
+									// key must be confirmed to belong to this app.
+									r.With(maybeRequirePermission(deps.RBACService, "app:write")).
+										With(maybeRequireKeyInApp(deps)).
+										Delete("/{keyId}", deps.TenantHandler.RevokeAPIKey)
 								})
 
 								// Endpoints under app
@@ -170,6 +253,10 @@ func New(deps Dependencies) *chi.Mux {
 										r.With(maybeRequirePermission(deps.RBACService, "endpoint:write")).Post("/", deps.APIMgmtHandler.DefineEndpoint)
 										r.With(maybeRequirePermission(deps.RBACService, "endpoint:read")).Get("/", deps.APIMgmtHandler.ListEndpoints)
 										r.Route("/{endpointId}", func(r chi.Router) {
+											// Every handler below resolves the endpoint
+											// (or its policy) by endpoint id alone.
+											r.Use(maybeRequireEndpointInApp(deps))
+
 											r.With(maybeRequirePermission(deps.RBACService, "endpoint:read")).Get("/", deps.APIMgmtHandler.GetEndpoint)
 											r.With(maybeRequirePermission(deps.RBACService, "endpoint:write")).Post("/retire", deps.APIMgmtHandler.RetireEndpoint)
 											r.With(maybeRequirePermission(deps.RBACService, "endpoint:write")).Post("/activate", deps.APIMgmtHandler.ActivateEndpoint)
@@ -200,7 +287,9 @@ func New(deps Dependencies) *chi.Mux {
 
 			// Audit logs by user
 			if deps.AuditHandler != nil {
-				r.With(maybeRequirePermission(deps.RBACService, "org:read")).Get("/users/{userId}/audit-logs", deps.AuditHandler.ListByUser)
+				r.With(maybeRequirePermission(deps.RBACService, "org:read")).
+					With(maybeRequireUserInOrg(deps, "userId")).
+					Get("/users/{userId}/audit-logs", deps.AuditHandler.ListByUser)
 			}
 
 			// Ticketing (triage). Every route resolves its organization from the
@@ -282,7 +371,7 @@ func New(deps Dependencies) *chi.Mux {
 			_, _ = w.Write([]byte(`{"error":"not found","code":404}`))
 			return
 		}
-		
+
 		// For /api/v1 paths, check if gateway pipeline already handled it
 		// If not, return 404 (gateway would have returned response if endpoint existed)
 		w.Header().Set("Content-Type", "application/json")

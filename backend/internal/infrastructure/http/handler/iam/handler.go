@@ -3,24 +3,24 @@ package iam
 import (
 	"net/http"
 
+	"github.com/Root-Emin/TicketLens/internal/application/iam/dto"
+	"github.com/Root-Emin/TicketLens/internal/application/iam/usecase"
+	"github.com/Root-Emin/TicketLens/internal/shared/middleware"
+	"github.com/Root-Emin/TicketLens/internal/shared/pagination"
+	"github.com/Root-Emin/TicketLens/internal/shared/response"
+	"github.com/Root-Emin/TicketLens/internal/shared/validator"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/application/iam/dto"
-	"github.com/masterfabric-go/masterfabric/internal/application/iam/usecase"
-	"github.com/masterfabric-go/masterfabric/internal/shared/middleware"
-	"github.com/masterfabric-go/masterfabric/internal/shared/pagination"
-	"github.com/masterfabric-go/masterfabric/internal/shared/response"
-	"github.com/masterfabric-go/masterfabric/internal/shared/validator"
 
-	iamRepo "github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
+	iamRepo "github.com/Root-Emin/TicketLens/internal/domain/iam/repository"
 )
 
 // Handler provides IAM HTTP handlers.
 type Handler struct {
-	registerUC  *usecase.RegisterUseCase
-	loginUC     *usecase.LoginUseCase
+	registerUC   *usecase.RegisterUseCase
+	loginUC      *usecase.LoginUseCase
 	assignRoleUC *usecase.AssignRoleUseCase
-	userRepo    iamRepo.UserRepository
+	userRepo     iamRepo.UserRepository
 }
 
 // NewHandler creates a new IAM handler.
@@ -31,10 +31,10 @@ func NewHandler(
 	userRepo iamRepo.UserRepository,
 ) *Handler {
 	return &Handler{
-		registerUC:  registerUC,
-		loginUC:     loginUC,
+		registerUC:   registerUC,
+		loginUC:      loginUC,
 		assignRoleUC: assignRoleUC,
-		userRepo:    userRepo,
+		userRepo:     userRepo,
 	}
 }
 
@@ -137,11 +137,21 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ListUsers returns a paginated list of users.
+// ListUsers returns a paginated list of users in the caller's organization.
+//
+// Scoped deliberately: the unscoped repository List spans every tenant, so
+// serving it here disclosed the email address of every account on the platform
+// to anyone holding user:read in any organization.
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.OrgIDFromContext(r.Context())
+	if !ok || orgID == uuid.Nil {
+		response.JSON(w, http.StatusForbidden, map[string]string{"error": "no organization in token"})
+		return
+	}
+
 	params := pagination.FromRequest(r)
 
-	users, total, err := h.userRepo.List(r.Context(), params.Offset(), params.Limit())
+	users, total, err := h.userRepo.ListByOrganization(r.Context(), orgID, params.Offset(), params.Limit())
 	if err != nil {
 		response.Error(w, err)
 		return

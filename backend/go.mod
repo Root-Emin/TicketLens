@@ -1,4 +1,4 @@
-module github.com/masterfabric-go/masterfabric
+module github.com/Root-Emin/TicketLens
 
 go 1.26.4
 

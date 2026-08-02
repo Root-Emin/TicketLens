@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/masterfabric-go/masterfabric/internal/shared/events"
+	"github.com/Root-Emin/TicketLens/internal/shared/events"
 )
 
 // Bus implements events.EventBus using Kafka as the transport.

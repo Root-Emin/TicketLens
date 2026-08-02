@@ -1,8 +1,8 @@
 package dto
 
 import (
+	"github.com/Root-Emin/TicketLens/internal/domain/triage/model"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/triage/model"
 )
 
 // CreateDepartmentRequest is the input for creating a department.

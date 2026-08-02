@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/Root-Emin/TicketLens/internal/domain/realtime/model"
+	realtimeService "github.com/Root-Emin/TicketLens/internal/domain/realtime/service"
 	"github.com/google/uuid"
-	"github.com/masterfabric-go/masterfabric/internal/domain/realtime/model"
-	realtimeService "github.com/masterfabric-go/masterfabric/internal/domain/realtime/service"
 )
 
 // Hub is an in-memory WebSocket connection manager.
