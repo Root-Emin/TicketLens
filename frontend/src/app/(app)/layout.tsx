@@ -22,7 +22,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { data: me } = useMe();
 
   return (
-    <div className="flex min-h-screen">
+    // legacy-theme restores this screen's original palette, which shadcn's
+    // global tokens now share names with. See globals.css section 2.
+    <div className="legacy-theme flex min-h-screen">
       <aside className="flex w-60 flex-col border-r border-border bg-surface">
         <div className="px-5 py-5 text-lg font-bold tracking-tight">
           Ticket<span className="text-accent">Lens</span>

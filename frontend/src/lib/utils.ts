@@ -1,5 +1,34 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+/*
+  tailwind-merge has to be told about the staff panel's `text-ui-*` font-size
+  scale. Left to its own devices it reads `text-ui-sm` as a *colour* — the same
+  conflict group as `text-tl-rail-text` — and silently drops whichever came
+  first. That turned every indented sidebar label transparent against the navy
+  rail: the size class won, the colour class vanished, and the text inherited
+  near-black from the shell.
+
+  Registering the scale under font-size keeps size and colour in separate
+  groups, so `cn("text-tl-rail-text", "text-ui-sm")` keeps both.
+*/
+const UI_TEXT_SIZES = [
+  "ui-xs",
+  "ui-sm",
+  "ui-base",
+  "ui-md",
+  "ui-lg",
+  "ui-xl",
+  "ui-2xl",
+];
+
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "font-size": [{ text: UI_TEXT_SIZES }],
+    },
+  },
+});
 
 /** cn merges conditional class names and resolves Tailwind conflicts. */
 export function cn(...inputs: ClassValue[]) {

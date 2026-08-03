@@ -91,7 +91,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <div className="legacy-theme flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <div className="mb-2 text-2xl font-bold tracking-tight text-foreground">

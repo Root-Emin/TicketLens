@@ -1,0 +1,51 @@
+# Root ignores for the TicketLens monorepo.
+#
+# ANCHORING: rules without a leading slash apply to every subdirectory. That is
+# deliberate for things that must never be committed wherever they appear
+# (secrets, bytecode, OS noise). backend/ and frontend/ each carry their own
+# .gitignore for their build output, so this file does not repeat it.
+
+# Claude Code workspace — local agent tooling, not part of the product.
+# Written as .claude/* rather than .claude/ so a shared settings file could be
+# re-included later: git cannot un-ignore a file inside an ignored *directory*,
+# only inside an ignored glob.
+.claude/*
+
+# Python bytecode. Unanchored so backend/ml never commits it either.
+__pycache__/
+*.py[cod]
+
+# Environment files. Unanchored on purpose: a stray .env must never be
+# committed, wherever it appears. The checked-in templates document the
+# contract and stay in the repo.
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Dependencies. A safety net for future workspaces — frontend/ anchors its own.
+node_modules/
+
+# Next.js output, unanchored. frontend/.gitignore anchors /.next/ to its own
+# root, so a stray build run from a subdirectory writes a .next/ that nothing
+# catches. This is that backstop.
+.next/
+
+# Logs. Note there is no *.csv rule here on purpose: backend/ml/data/eval
+# tracks a labelled sample that belongs in the diff.
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS noise
+.DS_Store
+Thumbs.db

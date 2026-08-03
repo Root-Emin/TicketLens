@@ -1,11 +1,96 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-/*
-  Design tokens. The agent panel is a dense, data-heavy tool, so the palette is
-  deliberately restrained: a neutral slate surface with a single indigo accent,
-  and semantic colors reserved for triage signals (priority, review state).
-*/
+@custom-variant dark (&:is(.dark *));
+
+/* ==========================================================================
+   1. shadcn/ui base tokens — global scope
+   --------------------------------------------------------------------------
+   These live on :root rather than on a wrapper class because Radix renders
+   dialogs, popovers, tooltips and drawers through a portal attached to
+   document.body. A scoped wrapper would leave every portalled surface
+   resolving the wrong palette.
+   ========================================================================== */
 :root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* ==========================================================================
+   2. Legacy (app) palette — scoped
+   --------------------------------------------------------------------------
+   The /dashboard, /tickets and /login screens were built against these token
+   names before shadcn arrived and claimed the same ones. Rather than restyle
+   working, backend-wired code, their original values are re-declared under
+   .legacy-theme, which those layouts apply at their root. Those screens use no
+   portals, so scoping is safe there.
+   ========================================================================== */
+.legacy-theme {
   --background: #f8fafc;
   --surface: #ffffff;
   --surface-muted: #f1f5f9;
@@ -23,10 +108,13 @@
   --success: #16a34a;
   --warning: #d97706;
   --danger: #dc2626;
+
+  background: var(--background);
+  color: var(--foreground);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  .legacy-theme {
     --background: #0b1120;
     --surface: #0f172a;
     --surface-muted: #1e293b;
@@ -38,15 +126,103 @@
   }
 }
 
+/* ==========================================================================
+   3. TicketLens staff panel palette
+   --------------------------------------------------------------------------
+   Uniquely prefixed, so it never collides with shadcn or the legacy screens.
+   Deliberately not theme-switched: the staff panel is a fixed light workspace
+   whose status colors are read at a glance.
+   ========================================================================== */
+:root {
+  --tl-navy: #0f172a;
+  --tl-navy-hover: #1e293b;
+  --tl-navy-line: #1e293b;
+  --tl-rail-text: #94a3b8;
+  /*
+    Section captions in the rail. Dimmer than the nav labels so the hierarchy
+    still reads, but 4.66:1 on the navy rather than the 3.75:1 that slate-500
+    was giving — captions are text and AA applies to them too.
+  */
+  --tl-rail-caption: #748496;
+
+  --tl-canvas: #f6f8fc;
+  --tl-card: #ffffff;
+  --tl-line: #e5e7eb;
+  --tl-line-soft: #f1f5f9;
+
+  --tl-ink: #0f172a;
+  --tl-ink-soft: #334155;
+  /*
+    Nudged darker from #64748b, which measured 4.48:1 on the canvas and missed
+    AA by a hair for the dashboard subtitle. 4.80:1 on canvas, 5.10:1 on white.
+  */
+  --tl-muted: #616f84;
+  /*
+    Text-safe grey: the old #94a3b8 measured 2.8:1 on white and failed AA for
+    the timestamps and captions that used it. The lighter tone survives as
+    --tl-faint-soft, for decorative icons and hairlines only — never text.
+  */
+  --tl-faint: #6b7280;
+  --tl-faint-soft: #94a3b8;
+
+  --tl-blue: #2563eb;
+  --tl-blue-soft: #eff6ff;
+  --tl-green: #22c55e;
+  --tl-green-ink: #15803d;
+  --tl-green-soft: #f0fdf4;
+  --tl-orange: #f59e0b;
+  --tl-orange-ink: #b45309;
+  --tl-orange-soft: #fffbeb;
+  --tl-red: #ef4444;
+  --tl-red-ink: #b91c1c;
+  --tl-red-soft: #fef2f2;
+}
+
 @theme inline {
+  /* shadcn */
   --color-background: var(--background);
-  --color-surface: var(--surface);
-  --color-surface-muted: var(--surface-muted);
-  --color-border: var(--border);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* legacy (app) */
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
   --color-priority-low: var(--priority-low);
   --color-priority-normal: var(--priority-normal);
   --color-priority-high: var(--priority-high);
@@ -54,15 +230,149 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-ui: var(--font-inter);
+  --font-heading: var(--font-inter);
+
+  /* staff palette */
+  --color-tl-navy: var(--tl-navy);
+  --color-tl-navy-hover: var(--tl-navy-hover);
+  --color-tl-navy-line: var(--tl-navy-line);
+  --color-tl-rail-text: var(--tl-rail-text);
+  --color-tl-rail-caption: var(--tl-rail-caption);
+  --color-tl-canvas: var(--tl-canvas);
+  --color-tl-card: var(--tl-card);
+  --color-tl-line: var(--tl-line);
+  --color-tl-line-soft: var(--tl-line-soft);
+  --color-tl-ink: var(--tl-ink);
+  --color-tl-ink-soft: var(--tl-ink-soft);
+  --color-tl-muted: var(--tl-muted);
+  --color-tl-faint: var(--tl-faint);
+  --color-tl-faint-soft: var(--tl-faint-soft);
+  --color-tl-blue: var(--tl-blue);
+  --color-tl-blue-soft: var(--tl-blue-soft);
+  --color-tl-green: var(--tl-green);
+  --color-tl-green-ink: var(--tl-green-ink);
+  --color-tl-green-soft: var(--tl-green-soft);
+  --color-tl-orange: var(--tl-orange);
+  --color-tl-orange-ink: var(--tl-orange-ink);
+  --color-tl-orange-soft: var(--tl-orange-soft);
+  --color-tl-red: var(--tl-red);
+  --color-tl-red-ink: var(--tl-red-ink);
+  --color-tl-red-soft: var(--tl-red-soft);
+
+  /*
+    Staff type scale. Namespaced as text-ui-* rather than overriding Tailwind's
+    text-sm/text-xs, which the legacy screens still rely on at their default
+    sizes. Replaces the six ad-hoc sizes that previously sat within 3px of each
+    other.
+  */
+  --text-ui-xs: 11px;
+  --text-ui-sm: 12px;
+  --text-ui-base: 13px;
+  --text-ui-md: 14px;
+  --text-ui-lg: 16px;
+  --text-ui-xl: 20px;
+  --text-ui-2xl: 22px;
+
+  --radius-card: 12px;
+  --radius-btn: 10px;
+
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.04);
+  --shadow-panel: 0 1px 2px rgba(16, 24, 40, 0.04);
+
+  /*
+    Disclosure animations for Radix Collapsible. The height comes from the
+    variable Radix measures onto the content element, which is the only way to
+    transition to `auto`.
+  */
+  --animate-collapsible-down: collapsible-down 200ms ease-out;
+  --animate-collapsible-up: collapsible-up 200ms ease-out;
+
+  @keyframes collapsible-down {
+    from {
+      height: 0;
+      opacity: 0;
+    }
+    to {
+      height: var(--radix-collapsible-content-height);
+      opacity: 1;
+    }
+  }
+
+  @keyframes collapsible-up {
+    from {
+      height: var(--radix-collapsible-content-height);
+      opacity: 1;
+    }
+    to {
+      height: 0;
+      opacity: 0;
+    }
+  }
 }
 
-* {
-  border-color: var(--border);
-}
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
+  /*
+    Tailwind v4's preflight dropped the old `cursor: pointer` on buttons, so
+    every button in the app was showing an arrow. Restored once here rather
+    than sprinkling `cursor-pointer` across a hundred call sites — this also
+    covers the shadcn components, which carry no cursor class of their own.
+  */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  /*
+    A dense agent workspace wants 28–36px controls on a mouse, but a finger
+    needs 44px. This expands the *hit area* only on coarse pointers, leaving
+    the visual size untouched, so the desktop layout does not loosen up to
+    satisfy a device it is not running on.
+  */
+  @media (pointer: coarse) {
+    .tap-target {
+      position: relative;
+    }
+
+    .tap-target::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      translate: -50% -50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+    }
+  }
+
+  /* Motion budget: 150–250ms, and nothing at all when the OS asks for calm. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }

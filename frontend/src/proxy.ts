@@ -20,7 +20,14 @@ export function proxy(req: NextRequest) {
 
   const isLogin = pathname === "/login";
 
-  if (!hasToken && !isLogin) {
+  // /staff runs entirely on fixtures and never calls the backend, so gating it
+  // on a session cookie would only lock people out of a panel that has nothing
+  // to protect yet. Restore this the moment it starts reading real tickets.
+  // "/" only redirects into /staff, so it is exempt too.
+  const isMockPanel =
+    pathname === "/" || pathname === "/staff" || pathname.startsWith("/staff/");
+
+  if (!hasToken && !isLogin && !isMockPanel) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("from", pathname);
