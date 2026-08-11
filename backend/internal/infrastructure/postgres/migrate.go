@@ -16,6 +16,78 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
+// PendingMigrations lists the embedded migrations that this database has not
+// recorded as applied, in the order they would run.
+//
+// Read-only on purpose: unlike MigrateUp it never creates schema_migrations and
+// never writes the bootstrap rows, so a server that is not allowed to touch the
+// schema can still tell whether it matches the database it is about to serve.
+// A database with no schema_migrations table at all is treated as having
+// nothing applied.
+func PendingMigrations(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
+	if pool == nil {
+		return nil, nil
+	}
+
+	files, err := migrationFiles()
+	if err != nil {
+		return nil, err
+	}
+
+	var tableExists bool
+	if err := pool.QueryRow(ctx,
+		`SELECT to_regclass('public.schema_migrations') IS NOT NULL`).Scan(&tableExists); err != nil {
+		return nil, fmt.Errorf("check schema_migrations: %w", err)
+	}
+	if !tableExists {
+		return files, nil
+	}
+
+	applied := map[string]bool{}
+	rows, err := pool.Query(ctx, `SELECT filename FROM schema_migrations`)
+	if err != nil {
+		return nil, fmt.Errorf("list applied migrations: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		applied[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var out []string
+	for _, name := range files {
+		if !applied[name] {
+			out = append(out, name)
+		}
+	}
+	return out, nil
+}
+
+// migrationFiles returns the embedded migration filenames in lexical order,
+// which is the order they are applied in.
+func migrationFiles() ([]string, error) {
+	entries, err := fs.ReadDir(migrationsFS, "migrations")
+	if err != nil {
+		return nil, fmt.Errorf("read embedded migrations: %w", err)
+	}
+
+	var files []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
+			continue
+		}
+		files = append(files, e.Name())
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
 // MigrateUp applies every pending goose-formatted migration in lexical order.
 //
 // Applied versions are recorded in schema_migrations so re-runs are no-ops.
@@ -34,19 +106,10 @@ func MigrateUp(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) error 
 		return fmt.Errorf("ensure schema_migrations: %w", err)
 	}
 
-	entries, err := fs.ReadDir(migrationsFS, "migrations")
+	files, err := migrationFiles()
 	if err != nil {
-		return fmt.Errorf("read embedded migrations: %w", err)
+		return err
 	}
-
-	var files []string
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
-			continue
-		}
-		files = append(files, e.Name())
-	}
-	sort.Strings(files)
 
 	applied := map[string]bool{}
 	rows, err := pool.Query(ctx, `SELECT filename FROM schema_migrations`)

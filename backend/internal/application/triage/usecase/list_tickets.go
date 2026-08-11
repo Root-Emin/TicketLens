@@ -32,10 +32,21 @@ func NewListTicketsUseCase(
 
 // Execute returns a filtered, sorted page of tickets.
 //
-// TODO(customer-portal): a caller holding only ticket:read_own must have
-// filter.CustomerID pinned to their own customer id. The filter already
-// supports it; the customer token carrying that id does not exist yet.
-func (uc *ListTicketsUseCase) Execute(ctx context.Context, orgID uuid.UUID, filter repository.TicketFilter, page dto.PageParams) (dto.ListResponse[dto.TicketListItem], error) {
+// A customer scope overwrites filter.CustomerID rather than defaulting it. The
+// value arrives from the request's query string, and honouring it here would
+// let anyone read another customer's queue by naming them — the whole point is
+// that this field is the server's to set.
+func (uc *ListTicketsUseCase) Execute(
+	ctx context.Context,
+	orgID uuid.UUID,
+	filter repository.TicketFilter,
+	page dto.PageParams,
+	scope Scope,
+) (dto.ListResponse[dto.TicketListItem], error) {
+	if scope.IsCustomer() {
+		filter.CustomerID = scope.CustomerFilter()
+	}
+
 	tickets, total, err := uc.ticketRepo.ListByOrg(ctx, orgID, filter, page.Offset(), page.Limit())
 	if err != nil {
 		return dto.ListResponse[dto.TicketListItem]{}, err

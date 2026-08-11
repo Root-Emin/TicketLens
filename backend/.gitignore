@@ -9,6 +9,9 @@
 
 # Binaries — /bin is this module's build output; an ml/bin/ would be unrelated.
 /bin/
+# `go build ./cmd/seed` drops a 14MB binary here. The Makefile target uses
+# `go run`, so this only ever appears from an ad-hoc build.
+/seed
 *.exe
 *.exe~
 *.dll

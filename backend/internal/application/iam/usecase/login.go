@@ -7,6 +7,7 @@ import (
 	"github.com/Root-Emin/TicketLens/internal/domain/iam/repository"
 	"github.com/Root-Emin/TicketLens/internal/domain/iam/service"
 	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
+	"github.com/google/uuid"
 )
 
 // LoginUseCase handles user authentication.
@@ -45,10 +46,27 @@ func (uc *LoginUseCase) Execute(ctx context.Context, req dto.LoginRequest) (*dto
 		return nil, err
 	}
 
+	// Roles travel in the token so a client can tell which panel this account
+	// belongs to without a second call. They are a *hint for presentation*:
+	// every authorization decision still goes through RBACService, which reads
+	// the live grants, because a 24-hour token would otherwise keep answering
+	// with the roles somebody held yesterday.
+	//
+	// Permissions are deliberately left out for the same reason — shipping them
+	// invites a caller to trust a stale list for an access decision.
+	var roles []string
+	if orgID != uuid.Nil {
+		roles, err = uc.roleRepo.GetUserRoleNames(ctx, user.ID, orgID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	token, err := uc.auth.GenerateToken(ctx, service.TokenClaims{
 		UserID:         user.ID,
 		Email:          user.Email,
 		OrganizationID: orgID,
+		Roles:          roles,
 	})
 	if err != nil {
 		return nil, domainErr.New(domainErr.ErrInternal, "failed to generate token", err)

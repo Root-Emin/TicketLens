@@ -12,6 +12,10 @@ type CustomerRepository interface {
 	Create(ctx context.Context, customer *model.Customer) error
 	GetByID(ctx context.Context, orgID, id uuid.UUID) (*model.Customer, error)
 	GetByEmail(ctx context.Context, orgID uuid.UUID, email string) (*model.Customer, error)
+	// GetByUserID resolves the customer a signed-in account belongs to. This is
+	// how a portal request learns whose tickets it may see; it must never be
+	// replaced by a lookup on anything the client supplies.
+	GetByUserID(ctx context.Context, orgID, userID uuid.UUID) (*model.Customer, error)
 	// ListByOrg returns customers for an organization. When query is non-empty it
 	// matches a substring of either email or full name.
 	ListByOrg(ctx context.Context, orgID uuid.UUID, query string, offset, limit int) ([]*model.Customer, int, error)

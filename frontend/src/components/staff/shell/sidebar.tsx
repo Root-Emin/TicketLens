@@ -136,9 +136,11 @@ export function Sidebar({
           aria-label="TicketLens dashboard"
           className="flex items-center gap-2.5 rounded-btn focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tl-blue focus-visible:ring-offset-2 focus-visible:ring-offset-tl-navy"
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-tl-blue">
-            <Ticket className="size-[18px] text-white" strokeWidth={2} aria-hidden />
-          </span>
+          <img
+            src="/assets/TicketLens_Logo/favicon.svg"
+            alt="TicketLens Logo"
+            className="size-8 shrink-0 rounded-[9px] object-contain shadow-sm"
+          />
           {!collapsed && (
             <span className="text-[17px] font-bold tracking-[-0.015em] text-white">
               TicketLens

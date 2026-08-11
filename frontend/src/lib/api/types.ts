@@ -130,7 +130,30 @@ export interface DepartmentInfo {
   description: string;
   category: Category | null;
   is_default: boolean;
+  /** Every ticket ever routed here, not just the open ones. */
   ticket_count: number;
+  /** People assigned to this department. Portal customers are not counted. */
+  staff_count: number;
+}
+
+/**
+ * One person on the support roster — dto.StaffInfo, from GET /staff.
+ *
+ * Deliberately not UserInfo. That one is IAM's and describes any account,
+ * including a customer's; this is triage's view of a colleague, and it is the
+ * only shape that carries a department.
+ */
+export interface StaffInfo {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  /** Precomputed server-side, falling back to the email. */
+  full_name: string;
+  status: string;
+  /** null when the person is on the roster but on no team. */
+  department: DepartmentRef | null;
+  created_at: string;
 }
 
 export interface StatsOverview {
@@ -169,6 +192,30 @@ export interface ListResponse<T> {
 /** Unpaginated collection envelope: {data}. */
 export interface CollectionResponse<T> {
   data: T[];
+}
+
+/**
+ * IAM/tenant list envelope: {data, page, per_page, total_count, total_pages}.
+ *
+ * Flat rather than nested under `meta`, unlike ListResponse above. The two
+ * shapes are a backend fact (shared/pagination.Result vs triage's own dto), not
+ * a modelling choice here, so both are spelled out rather than reconciled.
+ */
+export interface PageResult<T> {
+  data: T[];
+  page: number;
+  per_page: number;
+  total_count: number;
+  total_pages: number;
+}
+
+/** Organization identity, from GET /organizations. */
+export interface OrgInfo {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  created_at: string;
 }
 
 export interface TicketFilters {

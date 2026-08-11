@@ -53,6 +53,17 @@ export const api = {
     request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
+  /*
+    PUT serialises `body` unconditionally, unlike the two above.
+
+    Those treat a falsy body as "no body", which is fine for a PATCH — an empty
+    patch is a no-op. A PUT replaces a resource, so `{department_id: null}` is a
+    meaningful request meaning "on no team", and dropping it because the object
+    is truthy-but-nullish would silently turn a removal into a bodyless call the
+    backend rejects.
+  */
+  put: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 

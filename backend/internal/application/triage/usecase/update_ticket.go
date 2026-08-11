@@ -18,6 +18,42 @@ import (
 	"github.com/google/uuid"
 )
 
+// checkCustomerPatch narrows PATCH /tickets/{id} to the one thing a customer is
+// allowed to do with it: reopen their own resolved request.
+//
+// The endpoint exists for agents, who use it to correct the classifier's
+// priority and routing. Those are exactly the fields a customer must not touch
+// — a self-service priority field makes the whole triage meaningless, because
+// everything arrives urgent. So rather than granting customers ticket:update,
+// they get ticket:reopen_own, and this function enforces what that name
+// promises: one transition, resolved or closed back to open, and nothing else.
+//
+// Staff callers pass straight through; their limits are the ones already
+// encoded below.
+func checkCustomerPatch(ticket *model.Ticket, req dto.UpdateTicketRequest, scope Scope) error {
+	if !scope.IsCustomer() {
+		return nil
+	}
+
+	if req.Priority != nil || req.DepartmentID != nil {
+		return domainErr.New(domainErr.ErrForbidden,
+			"priority and department are set by triage, not by the requester", nil)
+	}
+	if req.Status == nil {
+		return domainErr.New(domainErr.ErrForbidden,
+			"you can only reopen your own resolved request", nil)
+	}
+	if model.TicketStatus(*req.Status) != model.TicketStatusOpen {
+		return domainErr.New(domainErr.ErrForbidden,
+			"a request can only be moved back to open", nil)
+	}
+	if !ticket.IsResolved() {
+		return domainErr.New(domainErr.ErrConflict,
+			"this request is not resolved, so there is nothing to reopen", nil)
+	}
+	return nil
+}
+
 // UpdateTicketUseCase applies a human's corrections to a ticket.
 type UpdateTicketUseCase struct {
 	ticketRepo     repository.TicketRepository
@@ -64,9 +100,15 @@ func NewUpdateTicketUseCase(
 //
 // A ticket with no analysis yet, or an analysis that predicted no department,
 // leaves the corresponding flag untouched: there is no prediction to override.
-func (uc *UpdateTicketUseCase) Execute(ctx context.Context, orgID, ticketID, actorID uuid.UUID, req dto.UpdateTicketRequest) (*dto.TicketDetail, error) {
+func (uc *UpdateTicketUseCase) Execute(ctx context.Context, orgID, ticketID, actorID uuid.UUID, req dto.UpdateTicketRequest, scope Scope) (*dto.TicketDetail, error) {
 	ticket, err := uc.ticketRepo.GetByID(ctx, orgID, ticketID)
 	if err != nil {
+		return nil, err
+	}
+	if err := scope.Guard(ticket); err != nil {
+		return nil, err
+	}
+	if err := checkCustomerPatch(ticket, req, scope); err != nil {
 		return nil, err
 	}
 

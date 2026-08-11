@@ -18,12 +18,21 @@ import (
 	"github.com/google/uuid"
 )
 
+// unassignedLiteral is the documented stand-in for "nobody", accepted wherever
+// a UUID otherwise would be: ?assignee_id=unassigned on the ticket queue and
+// ?department_id=unassigned on the staff roster. Named once so the two cannot
+// drift into accepting different spellings.
+const unassignedLiteral = "unassigned"
+
 // Handler provides Triage (ticketing) HTTP handlers.
 type Handler struct {
 	listDepartmentsUC  *usecase.ListDepartmentsUseCase
 	createDepartmentUC *usecase.CreateDepartmentUseCase
 	updateDepartmentUC *usecase.UpdateDepartmentUseCase
 	deleteDepartmentUC *usecase.DeleteDepartmentUseCase
+
+	listStaffUC             *usecase.ListStaffUseCase
+	assignStaffDepartmentUC *usecase.AssignStaffDepartmentUseCase
 
 	listCustomersUC  *usecase.ListCustomersUseCase
 	createCustomerUC *usecase.CreateCustomerUseCase
@@ -41,6 +50,12 @@ type Handler struct {
 	analyzeTicketUC *usecase.AnalyzeTicketUseCase
 
 	statsOverviewUC *usecase.StatsOverviewUseCase
+	ticketSummaryUC *usecase.TicketSummaryUseCase
+
+	// resolveScopeUC decides, per request, whether the caller reads the whole
+	// organization or only their own tickets. Every ticket route goes through
+	// it; see usecase.Scope.
+	resolveScopeUC *usecase.ResolveScopeUseCase
 
 	reviewThreshold float64
 }
@@ -51,6 +66,9 @@ type Config struct {
 	CreateDepartment *usecase.CreateDepartmentUseCase
 	UpdateDepartment *usecase.UpdateDepartmentUseCase
 	DeleteDepartment *usecase.DeleteDepartmentUseCase
+
+	ListStaff             *usecase.ListStaffUseCase
+	AssignStaffDepartment *usecase.AssignStaffDepartmentUseCase
 
 	ListCustomers  *usecase.ListCustomersUseCase
 	CreateCustomer *usecase.CreateCustomerUseCase
@@ -68,6 +86,8 @@ type Config struct {
 	AnalyzeTicket *usecase.AnalyzeTicketUseCase
 
 	StatsOverview *usecase.StatsOverviewUseCase
+	TicketSummary *usecase.TicketSummaryUseCase
+	ResolveScope  *usecase.ResolveScopeUseCase
 
 	// ReviewThreshold is CLASSIFIER_REVIEW_THRESHOLD, echoed back on ticket
 	// detail responses. It is a presentation hint, not a domain fact, which is
@@ -80,24 +100,28 @@ type Config struct {
 // NewHandler creates a new Triage handler.
 func NewHandler(cfg Config) *Handler {
 	return &Handler{
-		listDepartmentsUC:  cfg.ListDepartments,
-		createDepartmentUC: cfg.CreateDepartment,
-		updateDepartmentUC: cfg.UpdateDepartment,
-		deleteDepartmentUC: cfg.DeleteDepartment,
-		listCustomersUC:    cfg.ListCustomers,
-		createCustomerUC:   cfg.CreateCustomer,
-		getCustomerUC:      cfg.GetCustomer,
-		createTicketUC:     cfg.CreateTicket,
-		listTicketsUC:      cfg.ListTickets,
-		getTicketUC:        cfg.GetTicket,
-		updateTicketUC:     cfg.UpdateTicket,
-		assignTicketUC:     cfg.AssignTicket,
-		listMessagesUC:     cfg.ListMessages,
-		createMessageUC:    cfg.CreateMessage,
-		listAnalysesUC:     cfg.ListAnalyses,
-		analyzeTicketUC:    cfg.AnalyzeTicket,
-		statsOverviewUC:    cfg.StatsOverview,
-		reviewThreshold:    cfg.ReviewThreshold,
+		listDepartmentsUC:       cfg.ListDepartments,
+		createDepartmentUC:      cfg.CreateDepartment,
+		updateDepartmentUC:      cfg.UpdateDepartment,
+		deleteDepartmentUC:      cfg.DeleteDepartment,
+		listStaffUC:             cfg.ListStaff,
+		assignStaffDepartmentUC: cfg.AssignStaffDepartment,
+		listCustomersUC:         cfg.ListCustomers,
+		createCustomerUC:        cfg.CreateCustomer,
+		getCustomerUC:           cfg.GetCustomer,
+		createTicketUC:          cfg.CreateTicket,
+		listTicketsUC:           cfg.ListTickets,
+		getTicketUC:             cfg.GetTicket,
+		updateTicketUC:          cfg.UpdateTicket,
+		assignTicketUC:          cfg.AssignTicket,
+		listMessagesUC:          cfg.ListMessages,
+		createMessageUC:         cfg.CreateMessage,
+		listAnalysesUC:          cfg.ListAnalyses,
+		analyzeTicketUC:         cfg.AnalyzeTicket,
+		statsOverviewUC:         cfg.StatsOverview,
+		ticketSummaryUC:         cfg.TicketSummary,
+		resolveScopeUC:          cfg.ResolveScope,
+		reviewThreshold:         cfg.ReviewThreshold,
 	}
 }
 
@@ -109,6 +133,27 @@ func (h *Handler) withThreshold(ticket *dto.TicketDetail) *dto.TicketDetail {
 		ticket.ReviewThreshold = h.reviewThreshold
 	}
 	return ticket
+}
+
+// callerScope resolves what the authenticated caller may see and act on, and
+// writes the failure response itself so handlers stay a straight line.
+//
+// It is the single gate in front of every ticket route. A handler that forgets
+// to call it does not silently widen access — it will not compile, because the
+// use cases below all require a Scope.
+func (h *Handler) callerScope(w http.ResponseWriter, r *http.Request, orgID uuid.UUID) (usecase.Scope, bool) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		response.JSON(w, http.StatusUnauthorized, map[string]string{"error": "not authenticated"})
+		return usecase.Scope{}, false
+	}
+
+	scope, err := h.resolveScopeUC.Execute(r.Context(), orgID, userID)
+	if err != nil {
+		response.Error(w, err)
+		return usecase.Scope{}, false
+	}
+	return scope, true
 }
 
 // ─── Departments ─────────────────────────────────────────────────────────────
@@ -194,6 +239,74 @@ func (h *Handler) DeleteDepartment(w http.ResponseWriter, r *http.Request) {
 
 // ─── Customers ───────────────────────────────────────────────────────────────
 
+// ─── Staff ───────────────────────────────────────────────────────────────────
+
+// ListStaff returns a page of the organization's support staff.
+//
+// Filters: ?department_id=<uuid> narrows to one team and ?department_id=unassigned
+// returns the people on none — the same literal the ticket queue uses for
+// ?assignee_id, so the two lists are filtered the same way. ?q= matches name or
+// email.
+func (h *Handler) ListStaff(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := orgFromToken(w, r)
+	if !ok {
+		return
+	}
+
+	filter := repository.StaffFilter{Query: strings.TrimSpace(r.URL.Query().Get("q"))}
+
+	if raw := r.URL.Query().Get("department_id"); raw != "" {
+		if raw == unassignedLiteral {
+			filter.Unassigned = true
+		} else {
+			id, err := uuid.Parse(raw)
+			if err != nil {
+				response.JSON(w, http.StatusBadRequest,
+					map[string]string{"error": "invalid department_id"})
+				return
+			}
+			filter.DepartmentID = &id
+		}
+	}
+
+	result, err := h.listStaffUC.Execute(r.Context(), orgID, filter, pageParams(r))
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, result)
+}
+
+// AssignStaffDepartment places a staff member on a team, or removes them from
+// one when department_id is null.
+func (h *Handler) AssignStaffDepartment(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := orgFromToken(w, r)
+	if !ok {
+		return
+	}
+
+	userID, err := uuid.Parse(chi.URLParam(r, "userId"))
+	if err != nil {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "invalid user id"})
+		return
+	}
+
+	var req dto.AssignStaffDepartmentRequest
+	if err := validator.DecodeAndValidate(r, &req); err != nil {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	updated, err := h.assignStaffDepartmentUC.Execute(r.Context(), orgID, userID, req)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, updated)
+}
+
+// ─── Customers ───────────────────────────────────────────────────────────────
+
 // ListCustomers returns a page of customers, optionally filtered by ?q=.
 func (h *Handler) ListCustomers(w http.ResponseWriter, r *http.Request) {
 	orgID, ok := orgFromToken(w, r)
@@ -258,13 +371,18 @@ func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	scope, ok := h.callerScope(w, r, orgID)
+	if !ok {
+		return
+	}
+
 	var req dto.CreateTicketRequest
 	if err := validator.DecodeAndValidate(r, &req); err != nil {
 		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
-	ticket, err := h.createTicketUC.Execute(r.Context(), orgID, req)
+	ticket, err := h.createTicketUC.Execute(r.Context(), orgID, req, scope)
 	if err != nil {
 		response.Error(w, err)
 		return
@@ -279,13 +397,18 @@ func (h *Handler) ListTickets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	scope, ok := h.callerScope(w, r, orgID)
+	if !ok {
+		return
+	}
+
 	filter, err := ticketFilterFromQuery(r)
 	if err != nil {
 		response.Error(w, err)
 		return
 	}
 
-	result, err := h.listTicketsUC.Execute(r.Context(), orgID, filter, pageParams(r))
+	result, err := h.listTicketsUC.Execute(r.Context(), orgID, filter, pageParams(r), scope)
 	if err != nil {
 		response.Error(w, err)
 		return
@@ -304,14 +427,44 @@ func (h *Handler) GetTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Agents see internal notes; the customer portal (not implemented yet) would
-	// pass false here.
-	ticket, err := h.getTicketUC.Execute(r.Context(), orgID, ticketID, true)
+	scope, ok := h.callerScope(w, r, orgID)
+	if !ok {
+		return
+	}
+
+	// The scope carries both the ownership check and whether internal notes are
+	// included, so those two can never be answered inconsistently.
+	ticket, err := h.getTicketUC.Execute(r.Context(), orgID, ticketID, scope)
 	if err != nil {
 		response.Error(w, err)
 		return
 	}
 	response.JSON(w, http.StatusOK, h.withThreshold(ticket))
+}
+
+// TicketSummary serves the dashboard counters for whoever is asking.
+//
+// Scoped exactly like the list it summarises: an agent gets the organization's
+// figures, a customer gets their own. It is a separate endpoint from
+// /stats/overview because that one is gated on stats:read and reports on the
+// triage queue — numbers a customer has no business seeing even about
+// themselves.
+func (h *Handler) TicketSummary(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := orgFromToken(w, r)
+	if !ok {
+		return
+	}
+	scope, ok := h.callerScope(w, r, orgID)
+	if !ok {
+		return
+	}
+
+	summary, err := h.ticketSummaryUC.Execute(r.Context(), orgID, scope)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, summary)
 }
 
 // UpdateTicket patches priority, department and/or status.
@@ -325,6 +478,11 @@ func (h *Handler) UpdateTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	scope, ok := h.callerScope(w, r, orgID)
+	if !ok {
+		return
+	}
+
 	var req dto.UpdateTicketRequest
 	if err := validator.DecodeAndValidate(r, &req); err != nil {
 		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -332,7 +490,7 @@ func (h *Handler) UpdateTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actorID, _ := middleware.UserIDFromContext(r.Context())
-	ticket, err := h.updateTicketUC.Execute(r.Context(), orgID, ticketID, actorID, req)
+	ticket, err := h.updateTicketUC.Execute(r.Context(), orgID, ticketID, actorID, req, scope)
 	if err != nil {
 		response.Error(w, err)
 		return
@@ -378,7 +536,12 @@ func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	messages, err := h.listMessagesUC.Execute(r.Context(), orgID, ticketID, true)
+	scope, ok := h.callerScope(w, r, orgID)
+	if !ok {
+		return
+	}
+
+	messages, err := h.listMessagesUC.Execute(r.Context(), orgID, ticketID, scope)
 	if err != nil {
 		response.Error(w, err)
 		return
@@ -397,16 +560,21 @@ func (h *Handler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	scope, ok := h.callerScope(w, r, orgID)
+	if !ok {
+		return
+	}
+
 	var req dto.CreateMessageRequest
 	if err := validator.DecodeAndValidate(r, &req); err != nil {
 		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
-	// Author identity comes from the token. Every authenticated caller here is a
-	// platform user, so the message is authored by an agent.
+	// Author identity comes from the token by way of the scope: a customer
+	// writes as themselves, anyone else writes as an agent. The body never says.
 	actorID, _ := middleware.UserIDFromContext(r.Context())
-	message, err := h.createMessageUC.Execute(r.Context(), orgID, ticketID, model.AuthorTypeAgent, actorID, req)
+	message, err := h.createMessageUC.Execute(r.Context(), orgID, ticketID, actorID, req, scope)
 	if err != nil {
 		response.Error(w, err)
 		return
@@ -587,7 +755,7 @@ func ticketFilterFromQuery(r *http.Request) (repository.TicketFilter, error) {
 
 	// "unassigned" is a documented literal, not a UUID.
 	if raw := query.Get("assignee_id"); raw != "" {
-		if raw == "unassigned" {
+		if raw == unassignedLiteral {
 			filter.Unassigned = true
 		} else {
 			id, err := uuid.Parse(raw)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Root-Emin/TicketLens/internal/domain/iam/model"
+	"github.com/Root-Emin/TicketLens/internal/shared/database"
 	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -30,7 +31,7 @@ func (r *RoleRepo) Create(ctx context.Context, role *model.Role) error {
 	role.CreatedAt = now
 	role.UpdatedAt = now
 
-	_, err := r.db.Exec(ctx,
+	_, err := database.Querier(ctx, r.db).Exec(ctx,
 		`INSERT INTO roles (id, scope_type, scope_id, name, description, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		role.ID, role.ScopeType, role.ScopeID, role.Name, role.Description, role.CreatedAt, role.UpdatedAt,
@@ -43,7 +44,7 @@ func (r *RoleRepo) Create(ctx context.Context, role *model.Role) error {
 
 func (r *RoleRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Role, error) {
 	var role model.Role
-	err := r.db.QueryRow(ctx,
+	err := database.Querier(ctx, r.db).QueryRow(ctx,
 		`SELECT id, scope_type, scope_id, name, description, created_at, updated_at
 		 FROM roles WHERE id = $1`, id,
 	).Scan(&role.ID, &role.ScopeType, &role.ScopeID, &role.Name, &role.Description, &role.CreatedAt, &role.UpdatedAt)
@@ -57,7 +58,7 @@ func (r *RoleRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Role, erro
 }
 
 func (r *RoleRepo) ListByScope(ctx context.Context, scopeType model.ScopeType, scopeID uuid.UUID) ([]*model.Role, error) {
-	rows, err := r.db.Query(ctx,
+	rows, err := database.Querier(ctx, r.db).Query(ctx,
 		`SELECT id, scope_type, scope_id, name, description, created_at, updated_at
 		 FROM roles WHERE scope_type=$1 AND scope_id=$2 ORDER BY name`, scopeType, scopeID,
 	)
@@ -79,7 +80,7 @@ func (r *RoleRepo) ListByScope(ctx context.Context, scopeType model.ScopeType, s
 
 func (r *RoleRepo) Update(ctx context.Context, role *model.Role) error {
 	role.UpdatedAt = time.Now().UTC()
-	_, err := r.db.Exec(ctx,
+	_, err := database.Querier(ctx, r.db).Exec(ctx,
 		`UPDATE roles SET name=$1, description=$2, updated_at=$3 WHERE id=$4`,
 		role.Name, role.Description, role.UpdatedAt, role.ID,
 	)
@@ -90,7 +91,7 @@ func (r *RoleRepo) Update(ctx context.Context, role *model.Role) error {
 }
 
 func (r *RoleRepo) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := r.db.Exec(ctx, `DELETE FROM roles WHERE id=$1`, id)
+	_, err := database.Querier(ctx, r.db).Exec(ctx, `DELETE FROM roles WHERE id=$1`, id)
 	if err != nil {
 		return domainErr.New(domainErr.ErrInternal, "failed to delete role", err)
 	}
@@ -98,7 +99,7 @@ func (r *RoleRepo) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (r *RoleRepo) AddPermission(ctx context.Context, roleID uuid.UUID, permission string) error {
-	_, err := r.db.Exec(ctx,
+	_, err := database.Querier(ctx, r.db).Exec(ctx,
 		`INSERT INTO role_permissions (role_id, permission) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
 		roleID, permission,
 	)
@@ -109,7 +110,7 @@ func (r *RoleRepo) AddPermission(ctx context.Context, roleID uuid.UUID, permissi
 }
 
 func (r *RoleRepo) RemovePermission(ctx context.Context, roleID uuid.UUID, permission string) error {
-	_, err := r.db.Exec(ctx,
+	_, err := database.Querier(ctx, r.db).Exec(ctx,
 		`DELETE FROM role_permissions WHERE role_id=$1 AND permission=$2`,
 		roleID, permission,
 	)
@@ -120,7 +121,7 @@ func (r *RoleRepo) RemovePermission(ctx context.Context, roleID uuid.UUID, permi
 }
 
 func (r *RoleRepo) GetPermissions(ctx context.Context, roleID uuid.UUID) ([]string, error) {
-	rows, err := r.db.Query(ctx,
+	rows, err := database.Querier(ctx, r.db).Query(ctx,
 		`SELECT permission FROM role_permissions WHERE role_id=$1`, roleID,
 	)
 	if err != nil {
@@ -145,7 +146,7 @@ func (r *RoleRepo) AssignRoleToUser(ctx context.Context, userRole *model.UserRol
 	}
 	userRole.CreatedAt = time.Now().UTC()
 
-	_, err := r.db.Exec(ctx,
+	_, err := database.Querier(ctx, r.db).Exec(ctx,
 		`INSERT INTO user_roles (id, user_id, role_id, organization_id, app_id, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT (user_id, role_id, organization_id, app_id) DO NOTHING`,
@@ -158,7 +159,7 @@ func (r *RoleRepo) AssignRoleToUser(ctx context.Context, userRole *model.UserRol
 }
 
 func (r *RoleRepo) RemoveRoleFromUser(ctx context.Context, userID, roleID uuid.UUID) error {
-	_, err := r.db.Exec(ctx,
+	_, err := database.Querier(ctx, r.db).Exec(ctx,
 		`DELETE FROM user_roles WHERE user_id=$1 AND role_id=$2`, userID, roleID,
 	)
 	if err != nil {
@@ -168,7 +169,7 @@ func (r *RoleRepo) RemoveRoleFromUser(ctx context.Context, userID, roleID uuid.U
 }
 
 func (r *RoleRepo) GetUserRoles(ctx context.Context, userID, orgID uuid.UUID) ([]*model.UserRole, error) {
-	rows, err := r.db.Query(ctx,
+	rows, err := database.Querier(ctx, r.db).Query(ctx,
 		`SELECT id, user_id, role_id, organization_id, app_id, created_at
 		 FROM user_roles WHERE user_id=$1 AND organization_id=$2`, userID, orgID,
 	)
@@ -188,13 +189,40 @@ func (r *RoleRepo) GetUserRoles(ctx context.Context, userID, orgID uuid.UUID) ([
 	return userRoles, nil
 }
 
+func (r *RoleRepo) GetUserRoleNames(ctx context.Context, userID, orgID uuid.UUID) ([]string, error) {
+	rows, err := database.Querier(ctx, r.db).Query(ctx,
+		`SELECT DISTINCT ro.name
+		 FROM user_roles ur
+		 JOIN roles ro ON ro.id = ur.role_id
+		 WHERE ur.user_id = $1 AND ur.organization_id = $2
+		 ORDER BY ro.name`, userID, orgID,
+	)
+	if err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to get user role names", err)
+	}
+	defer rows.Close()
+
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, domainErr.New(domainErr.ErrInternal, "failed to scan role name", err)
+		}
+		names = append(names, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to iterate role names", err)
+	}
+	return names, nil
+}
+
 func (r *RoleRepo) GetPrimaryOrganization(ctx context.Context, userID uuid.UUID) (uuid.UUID, error) {
 	// TODO(multi-org): the MVP assumes a user belongs to exactly one
 	// organization, so the oldest assignment wins. Once multi-org membership is
 	// supported this should return every organization and let the caller pick
 	// the active one (e.g. from an X-Organization-ID header).
 	var orgID uuid.UUID
-	err := r.db.QueryRow(ctx,
+	err := database.Querier(ctx, r.db).QueryRow(ctx,
 		`SELECT organization_id FROM user_roles WHERE user_id = $1
 		 ORDER BY created_at ASC LIMIT 1`, userID,
 	).Scan(&orgID)
@@ -209,7 +237,7 @@ func (r *RoleRepo) GetPrimaryOrganization(ctx context.Context, userID uuid.UUID)
 }
 
 func (r *RoleRepo) GetUserPermissions(ctx context.Context, userID, orgID uuid.UUID) ([]string, error) {
-	rows, err := r.db.Query(ctx,
+	rows, err := database.Querier(ctx, r.db).Query(ctx,
 		`SELECT DISTINCT rp.permission
 		 FROM user_roles ur
 		 JOIN role_permissions rp ON ur.role_id = rp.role_id

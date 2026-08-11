@@ -274,6 +274,10 @@ func ticketOrderBy(sort string) string {
 		return priorityRank + " ASC, t.created_at DESC"
 	case repository.SortPriorityDesc:
 		return priorityRank + " DESC, t.created_at DESC"
+	case repository.SortUpdatedAtAsc:
+		return "t.updated_at ASC"
+	case repository.SortUpdatedAtDesc:
+		return "t.updated_at DESC"
 	default: // repository.SortCreatedAtDesc
 		return "t.created_at DESC"
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	// Infrastructure
+	iamPort "github.com/Root-Emin/TicketLens/internal/domain/iam/port"
 	"github.com/Root-Emin/TicketLens/internal/domain/triage/port"
 	infraAuth "github.com/Root-Emin/TicketLens/internal/infrastructure/auth"
 	httpClassifier "github.com/Root-Emin/TicketLens/internal/infrastructure/classifier/http"
@@ -26,6 +27,7 @@ import (
 	triageHandler "github.com/Root-Emin/TicketLens/internal/infrastructure/http/handler/triage"
 	"github.com/Root-Emin/TicketLens/internal/infrastructure/http/router"
 	infraKafka "github.com/Root-Emin/TicketLens/internal/infrastructure/kafka"
+	"github.com/Root-Emin/TicketLens/internal/infrastructure/mail"
 	"github.com/Root-Emin/TicketLens/internal/infrastructure/postgres"
 	pgApimgmt "github.com/Root-Emin/TicketLens/internal/infrastructure/postgres/apimanagement"
 	pgAudit "github.com/Root-Emin/TicketLens/internal/infrastructure/postgres/audit"
@@ -89,6 +91,10 @@ func run() error {
 			"env", cfg.Env)
 	}
 
+	for _, w := range cfg.Warnings() {
+		log.Warn(w)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -101,18 +107,24 @@ func run() error {
 		log.Info("opentelemetry initialized")
 	}
 
-	// Initialize PostgreSQL
+	// Initialize PostgreSQL.
+	//
+	// Development tolerates its absence so the UI can be worked on with no
+	// infrastructure running. Anywhere else a database-less process is not a
+	// degraded server, it is a server that answers every request with a 500
+	// while its readiness probe has to lie about it — so refuse to start.
 	db, err := database.NewPostgresPool(ctx, cfg.Database)
 	if err != nil {
+		if !cfg.IsDevelopment() {
+			return fmt.Errorf("connect to postgres (required for APP_ENV=%s): %w", cfg.Env, err)
+		}
 		log.Warn("postgres unavailable, running without database", "error", err)
 		db = nil
 	} else {
 		defer db.Close()
 		log.Info("connected to postgres")
-		// Apply pending migrations so a fresh checkout does not require a
-		// separate make migrate / start.sh infra step before serving.
-		if migErr := postgres.MigrateUp(ctx, db, log); migErr != nil {
-			return fmt.Errorf("run migrations: %w", migErr)
+		if err := prepareSchema(context.Background(), cfg, db, log); err != nil {
+			return err
 		}
 	}
 
@@ -184,6 +196,71 @@ func run() error {
 	return nil
 }
 
+// migrationTimeout bounds the schema step. It is deliberately not the ten
+// second budget the rest of startup shares: that one sizes a TCP dial, while
+// this one has to cover DDL over a table that may already hold real data.
+const migrationTimeout = 2 * time.Minute
+
+// prepareSchema reconciles the database schema with the binary's embedded
+// migrations, in one of two modes.
+//
+// With DB_AUTO_MIGRATE on (the development default) the server applies pending
+// migrations itself, so a fresh checkout serves without a separate step. With
+// it off — every deployment — migrations are their own deploy stage (cmd/migrate)
+// and the server only checks. Finding work left to do there means the deploy
+// skipped that stage, and the running binary expects columns the database does
+// not have; failing the boot surfaces that immediately instead of turning it
+// into a scattering of query errors under live traffic.
+func prepareSchema(ctx context.Context, cfg *config.Config, db *pgxpool.Pool, log *slog.Logger) error {
+	ctx, cancel := context.WithTimeout(ctx, migrationTimeout)
+	defer cancel()
+
+	if cfg.Database.AutoMigrate {
+		if err := postgres.MigrateUp(ctx, db, log); err != nil {
+			return fmt.Errorf("run migrations: %w", err)
+		}
+		return nil
+	}
+
+	pending, err := postgres.PendingMigrations(ctx, db)
+	if err != nil {
+		return fmt.Errorf("check pending migrations: %w", err)
+	}
+	if len(pending) > 0 {
+		return fmt.Errorf(
+			"database has %d pending migration(s), starting with %s: run the migrate binary before the server (DB_AUTO_MIGRATE is off)",
+			len(pending), pending[0])
+	}
+
+	log.Info("database schema is up to date", "auto_migrate", false)
+	return nil
+}
+
+// initMailer selects the outbound mail adapter.
+//
+// No SMTP host means the logging mailer, which writes each message — invitation
+// link included — to the server log instead of delivering it. That keeps local
+// development and the test suite free of a mail server, mirrors how an empty
+// CLASSIFIER_URL selects the keyword stub, and makes the absence visible rather
+// than turning every invitation into a silent no-op. config.Warnings says so
+// again at startup for any non-development environment.
+func initMailer(cfg *config.Config, log *slog.Logger) iamPort.Mailer {
+	if !cfg.Mail.Enabled() {
+		log.Info("no SMTP host configured; invitation emails will be written to this log")
+		return mail.NewLogMailer(log)
+	}
+
+	log.Info("smtp mailer initialized", "host", cfg.Mail.Host, "port", cfg.Mail.Port, "from", cfg.Mail.From)
+	return mail.NewSMTPMailer(mail.SMTPConfig{
+		Host:     cfg.Mail.Host,
+		Port:     cfg.Mail.Port,
+		Username: cfg.Mail.Username,
+		Password: cfg.Mail.Password,
+		From:     cfg.Mail.From,
+		Timeout:  cfg.Mail.Timeout,
+	})
+}
+
 // initEventBus creates either a Kafka bus or an in-process bus based on config.
 func initEventBus(ctx context.Context, cfg *config.Config, log *slog.Logger) events.EventBus {
 	if !cfg.Kafka.Enabled {
@@ -232,6 +309,8 @@ func buildDependencies(
 		Redis:              redisClient,
 		CORSAllowedOrigins: cfg.Server.CORSAllowedOrigins,
 		MaxBodyBytes:       cfg.Server.MaxBodyBytes,
+
+		AllowPublicRegistration: cfg.Onboarding.AllowPublicRegistration,
 	}
 
 	if db == nil {
@@ -251,15 +330,18 @@ func buildDependencies(
 	auditRepo := pgAudit.NewAuditRepo(db)
 	departmentRepo := pgTriage.NewDepartmentRepo(db)
 	customerRepo := pgTriage.NewCustomerRepo(db)
+	staffRepo := pgTriage.NewStaffRepo(db)
 	ticketRepo := pgTriage.NewTicketRepo(db)
 	ticketMessageRepo := pgTriage.NewTicketMessageRepo(db)
 	aiAnalysisRepo := pgTriage.NewAIAnalysisRepo(db)
 	statsRepo := pgTriage.NewStatsRepo(db)
+	invitationRepo := pgIam.NewInvitationRepo(db)
 	txManager := database.NewTxManager(db)
 
 	// --- Services ---
 	jwtService := infraAuth.NewJWTService(cfg.JWT)
 	rbacService := infraAuth.NewRBACService(roleRepo, redisClient)
+	mailer := initMailer(cfg, log)
 
 	deps.AuthService = jwtService
 	deps.RBACService = rbacService
@@ -277,7 +359,17 @@ func buildDependencies(
 	// --- Use cases (with event bus for domain event publishing) ---
 	registerUC := iamUC.NewRegisterUseCase(userRepo, jwtService, eventBus)
 	loginUC := iamUC.NewLoginUseCase(userRepo, roleRepo, jwtService)
+	changePasswordUC := iamUC.NewChangePasswordUseCase(userRepo, jwtService)
 	assignRoleUC := iamUC.NewAssignRoleUseCase(roleRepo, rbacService, eventBus)
+	createInvitationUC := iamUC.NewCreateInvitationUseCase(
+		invitationRepo, userRepo, roleRepo, orgRepo, mailer, log,
+		cfg.Onboarding.PublicAppURL, cfg.Onboarding.InvitationTTL)
+	acceptInvitationUC := iamUC.NewAcceptInvitationUseCase(
+		invitationRepo, userRepo, roleRepo, orgRepo, staffRepo,
+		jwtService, rbacService, txManager, eventBus)
+	listInvitationsUC := iamUC.NewListInvitationsUseCase(invitationRepo, roleRepo, userRepo)
+	revokeInvitationUC := iamUC.NewRevokeInvitationUseCase(invitationRepo)
+	listRolesUC := iamUC.NewListRolesUseCase(roleRepo)
 	createOrgUC := tenantUC.NewCreateOrgUseCase(orgRepo, roleRepo, departmentRepo, eventBus)
 	createWorkspaceUC := tenantUC.NewCreateWorkspaceUseCase(workspaceRepo, orgRepo, eventBus)
 	listWorkspacesUC := tenantUC.NewListWorkspacesUseCase(workspaceRepo)
@@ -307,7 +399,11 @@ func buildDependencies(
 	})
 
 	// --- Handlers ---
-	deps.IAMHandler = iamHandler.NewHandler(registerUC, loginUC, assignRoleUC, userRepo)
+	deps.IAMHandler = iamHandler.NewHandler(
+		registerUC, loginUC, assignRoleUC, changePasswordUC,
+		createInvitationUC, acceptInvitationUC, listInvitationsUC, revokeInvitationUC,
+		listRolesUC,
+		userRepo)
 	deps.TenantHandler = tenantHandler.NewHandler(
 		createOrgUC,
 		createAppUC,
@@ -331,10 +427,13 @@ func buildDependencies(
 	)
 
 	deps.TriageHandler = triageHandler.NewHandler(triageHandler.Config{
-		ListDepartments:  triageUC.NewListDepartmentsUseCase(departmentRepo, ticketRepo),
+		ListDepartments:  triageUC.NewListDepartmentsUseCase(departmentRepo, ticketRepo, staffRepo),
 		CreateDepartment: triageUC.NewCreateDepartmentUseCase(departmentRepo),
 		UpdateDepartment: triageUC.NewUpdateDepartmentUseCase(departmentRepo, ticketRepo),
 		DeleteDepartment: triageUC.NewDeleteDepartmentUseCase(departmentRepo, ticketRepo),
+
+		ListStaff:             triageUC.NewListStaffUseCase(staffRepo),
+		AssignStaffDepartment: triageUC.NewAssignStaffDepartmentUseCase(staffRepo, departmentRepo),
 
 		ListCustomers:  triageUC.NewListCustomersUseCase(customerRepo),
 		CreateCustomer: triageUC.NewCreateCustomerUseCase(customerRepo),
@@ -358,6 +457,11 @@ func buildDependencies(
 		AnalyzeTicket: analyzeTicketUC,
 
 		StatsOverview: triageUC.NewStatsOverviewUseCase(statsRepo),
+		TicketSummary: triageUC.NewTicketSummaryUseCase(statsRepo),
+
+		// Resolves per request whether the caller reads the whole queue or
+		// only their own tickets. Every ticket route depends on it.
+		ResolveScope: triageUC.NewResolveScopeUseCase(rbacService, customerRepo),
 
 		ReviewThreshold: cfg.Classifier.ReviewThreshold,
 	})

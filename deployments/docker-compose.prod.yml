@@ -1,0 +1,235 @@
+# TicketLens production stack — single host, TLS terminated by Caddy.
+#
+# Separate from backend/deployments/docker-compose.yml, which stays the local
+# development stack and is not touched by any of this. That one runs
+# infrastructure only and binds it to loopback with well-known credentials; this
+# one runs the whole product and refuses to start without real secrets.
+#
+#   docker compose -f deployments/docker-compose.prod.yml \
+#                  --env-file deployments/.env.prod <command>
+#
+# See deployments/README.md for the install, upgrade and rollback runbook.
+#
+# Kafka is deliberately absent. KAFKA_ENABLED defaults to false and the backend
+# then uses its in-process bus, so a broker would be an operational burden with
+# no consumer asking for it. Revisit when a subscriber needs delivery to survive
+# a restart.
+
+name: ticketlens
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN is required}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and ACME account keys. Losing this volume means re-issuing
+      # from Let's Encrypt, which is rate limited — back it up with the database.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_started
+    networks:
+      - edge
+
+  frontend:
+    image: ${GHCR_REPO:?GHCR_REPO is required}/ticketlens-frontend:${IMAGE_TAG:?IMAGE_TAG is required}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # Server-side only. The browser never sees this: it calls /api/proxy/*,
+      # which this container forwards over the internal network.
+      API_URL: http://backend:8080
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - edge
+      - internal
+
+  backend:
+    image: ${GHCR_REPO}/ticketlens-backend:${IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "8080"
+
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:-ticketlens}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      DB_NAME: ${POSTGRES_DB:-ticketlens}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      # Off: the migrate service below owns the schema. The server verifies it
+      # is current and refuses to start otherwise (cmd/server prepareSchema).
+      DB_AUTO_MIGRATE: "false"
+
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRATION_HOURS: ${JWT_EXPIRATION_HOURS:-24}
+
+      # Onboarding. Staff arrive by invitation; the registration route is not
+      # mounted unless this is explicitly turned on.
+      ALLOW_PUBLIC_REGISTRATION: ${ALLOW_PUBLIC_REGISTRATION:-false}
+      # The address an invitee opens, so the public hostname — not the internal
+      # service name the frontend is reached by inside this network.
+      PUBLIC_APP_URL: https://${APP_DOMAIN}
+      INVITATION_TTL_HOURS: ${INVITATION_TTL_HOURS:-168}
+
+      # Mail. Unset SMTP_HOST logs invitation emails instead of sending them;
+      # the backend warns about it at every startup.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-TicketLens <no-reply@${APP_DOMAIN}>}
+
+      # Required by config.Validate outside development. Nothing reaches the Go
+      # server cross-origin — the frontend proxies server-side — so this names
+      # the public origin only to satisfy that check with an honest value.
+      CORS_ALLOWED_ORIGINS: https://${APP_DOMAIN}
+
+      CLASSIFIER_URL: http://classifier:8091
+      CLASSIFIER_TIMEOUT_MS: ${CLASSIFIER_TIMEOUT_MS:-5000}
+      CLASSIFIER_FALLBACK_TO_STUB: ${CLASSIFIER_FALLBACK_TO_STUB:-true}
+      CLASSIFIER_REVIEW_THRESHOLD: ${CLASSIFIER_REVIEW_THRESHOLD:-0.60}
+
+      KAFKA_ENABLED: "false"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: json
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      # On edge as well as internal, and only for egress: sending invitation
+      # mail means reaching an SMTP relay off this host, which the internal
+      # network forbids by design. Being on edge does not publish anything —
+      # exposure comes from a ports mapping, and this service has none.
+      - edge
+      - internal
+
+  # One-shot: applies pending migrations and exits. Runs from the same image as
+  # the server, so the migrations it applies are exactly the ones that binary
+  # was built with. `docker compose up` waits for it to succeed before starting
+  # the backend; a failure here leaves the previous version serving.
+  migrate:
+    image: ${GHCR_REPO}/ticketlens-backend:${IMAGE_TAG}
+    entrypoint: ["/app/migrate"]
+    restart: "no"
+    environment:
+      APP_ENV: production
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:-ticketlens}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB:-ticketlens}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      # config.Validate runs here too and checks both of these, even though a
+      # migration uses neither.
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ALLOWED_ORIGINS: https://${APP_DOMAIN}
+      LOG_FORMAT: json
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
+  classifier:
+    image: ${GHCR_REPO}/ticketlens-classifier:${IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      MODEL_DIR: /models
+    networks:
+      - internal
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ticketlens}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-ticketlens}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ticketlens} -d ${POSTGRES_DB:-ticketlens}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  # Nightly pg_dump into a host directory, with retention. Runs in a loop rather
+  # than under cron so it needs no scheduler on the host and shows up in
+  # `docker compose ps` like everything else.
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/backup/backup.sh", "--loop"]
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-ticketlens}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-ticketlens}
+      BACKUP_DIR: /backup/dumps
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      - ./backup:/backup
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
+networks:
+  # Two networks, split by whether a service has any business reaching the
+  # outside world.
+  #
+  # `edge` is an ordinary bridge with egress: caddy (ACME), frontend, and the
+  # backend (SMTP). None of them is exposed by being here — inbound exposure
+  # comes from a ports mapping, and only caddy has one.
+  #
+  # `internal` has no route off the host at all. The datastores and the
+  # classifier live there and nowhere else, so a compromised dependency in any
+  # of them has no path out.
+  edge:
+  internal:
+    internal: true
+
+volumes:
+  pgdata:
+  redisdata:
+  caddy_data:
+  caddy_config:

@@ -17,10 +17,16 @@ import (
 
 // Handler provides IAM HTTP handlers.
 type Handler struct {
-	registerUC   *usecase.RegisterUseCase
-	loginUC      *usecase.LoginUseCase
-	assignRoleUC *usecase.AssignRoleUseCase
-	userRepo     iamRepo.UserRepository
+	registerUC         *usecase.RegisterUseCase
+	loginUC            *usecase.LoginUseCase
+	assignRoleUC       *usecase.AssignRoleUseCase
+	changePasswordUC   *usecase.ChangePasswordUseCase
+	createInvitationUC *usecase.CreateInvitationUseCase
+	acceptInvitationUC *usecase.AcceptInvitationUseCase
+	listInvitationsUC  *usecase.ListInvitationsUseCase
+	revokeInvitationUC *usecase.RevokeInvitationUseCase
+	listRolesUC        *usecase.ListRolesUseCase
+	userRepo           iamRepo.UserRepository
 }
 
 // NewHandler creates a new IAM handler.
@@ -28,14 +34,51 @@ func NewHandler(
 	registerUC *usecase.RegisterUseCase,
 	loginUC *usecase.LoginUseCase,
 	assignRoleUC *usecase.AssignRoleUseCase,
+	changePasswordUC *usecase.ChangePasswordUseCase,
+	createInvitationUC *usecase.CreateInvitationUseCase,
+	acceptInvitationUC *usecase.AcceptInvitationUseCase,
+	listInvitationsUC *usecase.ListInvitationsUseCase,
+	revokeInvitationUC *usecase.RevokeInvitationUseCase,
+	listRolesUC *usecase.ListRolesUseCase,
 	userRepo iamRepo.UserRepository,
 ) *Handler {
 	return &Handler{
-		registerUC:   registerUC,
-		loginUC:      loginUC,
-		assignRoleUC: assignRoleUC,
-		userRepo:     userRepo,
+		registerUC:         registerUC,
+		loginUC:            loginUC,
+		assignRoleUC:       assignRoleUC,
+		changePasswordUC:   changePasswordUC,
+		createInvitationUC: createInvitationUC,
+		acceptInvitationUC: acceptInvitationUC,
+		listInvitationsUC:  listInvitationsUC,
+		revokeInvitationUC: revokeInvitationUC,
+		listRolesUC:        listRolesUC,
+		userRepo:           userRepo,
 	}
+}
+
+// ChangePassword replaces the signed-in user's own password.
+//
+// Mounted under the authenticated routes, not under /auth, even though the path
+// reads that way: it needs a validated token to know whose password to change,
+// and /auth/* is the public subtree.
+func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		response.JSON(w, http.StatusUnauthorized, map[string]string{"error": "not authenticated"})
+		return
+	}
+
+	var req dto.ChangePasswordRequest
+	if err := validator.DecodeAndValidate(r, &req); err != nil {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := h.changePasswordUC.Execute(r.Context(), userID, req); err != nil {
+		response.Error(w, err)
+		return
+	}
+	response.NoContent(w)
 }
 
 // Register handles user registration.
@@ -72,20 +115,40 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, result)
 }
 
-// AssignRole handles role assignment.
+// AssignRole handles role assignment within the caller's organization.
 func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := orgFromToken(w, r)
+	if !ok {
+		return
+	}
+
 	var req dto.AssignRoleRequest
 	if err := validator.DecodeAndValidate(r, &req); err != nil {
 		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
-	if err := h.assignRoleUC.Execute(r.Context(), req); err != nil {
+	if err := h.assignRoleUC.Execute(r.Context(), orgID, req); err != nil {
 		response.Error(w, err)
 		return
 	}
 
 	response.NoContent(w)
+}
+
+// orgFromToken reads the caller's organization from the validated claims and
+// answers 403 when there is none.
+//
+// Every organization-scoped handler in this package goes through it rather than
+// reading the context inline, so none of them can accidentally fall back to a
+// value supplied by the request.
+func orgFromToken(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	orgID, ok := middleware.OrgIDFromContext(r.Context())
+	if !ok || orgID == uuid.Nil {
+		response.JSON(w, http.StatusForbidden, map[string]string{"error": "no organization in token"})
+		return uuid.Nil, false
+	}
+	return orgID, true
 }
 
 // GetMe returns the current authenticated user.
@@ -143,9 +206,8 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 // serving it here disclosed the email address of every account on the platform
 // to anyone holding user:read in any organization.
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
-	orgID, ok := middleware.OrgIDFromContext(r.Context())
-	if !ok || orgID == uuid.Nil {
-		response.JSON(w, http.StatusForbidden, map[string]string{"error": "no organization in token"})
+	orgID, ok := orgFromToken(w, r)
+	if !ok {
 		return
 	}
 

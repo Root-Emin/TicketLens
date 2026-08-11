@@ -23,6 +23,15 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "TicketLens",
   description: "AI-assisted support ticket triage",
+  icons: {
+    icon: [
+      { url: "/assets/TicketLens_Logo/favicon.ico" },
+      { url: "/assets/TicketLens_Logo/favicon.svg", type: "image/svg+xml" },
+      { url: "/assets/TicketLens_Logo/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+    ],
+    apple: "/assets/TicketLens_Logo/apple-touch-icon.png",
+  },
+  manifest: "/assets/TicketLens_Logo/site.webmanifest",
 };
 
 export default function RootLayout({

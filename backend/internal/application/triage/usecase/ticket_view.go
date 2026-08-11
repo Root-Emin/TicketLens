@@ -41,6 +41,11 @@ func newTicketAssembler(
 	}
 }
 
+// snippetLength is how much of the opening message a list item carries. Long
+// enough for two lines in a card, short enough that a page of 25 tickets does
+// not ship 100KB of description nobody will read.
+const snippetLength = 240
+
 // toListItems enriches a page of tickets.
 func (a *ticketAssembler) toListItems(ctx context.Context, orgID uuid.UUID, tickets []*model.Ticket) ([]dto.TicketListItem, error) {
 	if len(tickets) == 0 {
@@ -82,6 +87,16 @@ func (a *ticketAssembler) toListItems(ctx context.Context, orgID uuid.UUID, tick
 		return nil, err
 	}
 
+	previews, err := a.messageRepo.PreviewByTickets(ctx, orgID, ticketIDs, snippetLength)
+	if err != nil {
+		return nil, err
+	}
+
+	firstResponses, err := a.messageRepo.FirstResponseByTickets(ctx, orgID, ticketIDs)
+	if err != nil {
+		return nil, err
+	}
+
 	assignees, err := a.resolveAssignees(ctx, tickets)
 	if err != nil {
 		return nil, err
@@ -100,6 +115,14 @@ func (a *ticketAssembler) toListItems(ctx context.Context, orgID uuid.UUID, tick
 			CreatedAt:            t.CreatedAt,
 			UpdatedAt:            t.UpdatedAt,
 			ResolvedAt:           t.ResolvedAt,
+			Snippet:              previews[t.ID],
+		}
+
+		// Absent until support answers. Nil rather than the zero time so a
+		// client can tell "not answered yet" from "answered at year zero".
+		if at, ok := firstResponses[t.ID]; ok {
+			respondedAt := at
+			item.FirstResponseAt = &respondedAt
 		}
 
 		if d, ok := departmentByID[t.DepartmentID]; ok {

@@ -1,0 +1,45 @@
+# TicketLens edge configuration.
+#
+# One public hostname. The Go backend has no entry here on purpose: the browser
+# never talks to it. Every API call goes to the Next server as /api/proxy/*,
+# which forwards it over the internal network with the JWT taken from an
+# httpOnly cookie (frontend/src/lib/server/backend.ts). Publishing :8080 would
+# add an authentication surface the product does not otherwise have.
+#
+# Certificates are issued and renewed automatically from Let's Encrypt and kept
+# in the caddy_data volume.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# Operational endpoints are internal-only. They reach the backend, not this
+	# server, but the frontend would happily proxy any path it is asked for, so
+	# the block belongs here — ahead of the catch-all below. Read them with
+	# `docker compose exec backend wget -qO- localhost:8080/metrics` instead.
+	@ops path /metrics /metrics/* /health /health/*
+	respond @ops 404
+
+	reverse_proxy frontend:3000 {
+		header_up X-Real-IP {remote_host}
+	}
+
+	header {
+		# HSTS. Only safe because Caddy redirects http->https itself and the
+		# certificate covers this exact host.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Caddy's own version is not something a client needs to know.
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

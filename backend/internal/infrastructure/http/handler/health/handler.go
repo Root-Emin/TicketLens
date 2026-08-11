@@ -26,8 +26,20 @@ type redisPinger interface {
 }
 
 // NewHandler creates a new health handler.
-func NewHandler(db *pgxpool.Pool, redis *redis.Client) *Handler {
-	return &Handler{db: db, redis: redis}
+//
+// A nil pool or client is stored as a nil interface rather than a typed nil:
+// assigning the typed nil straight through would leave the interface non-nil,
+// and the readiness probe would call Ping on it and panic. Readiness reports
+// an absent dependency as not_configured instead — see Readiness.
+func NewHandler(db *pgxpool.Pool, redisClient *redis.Client) *Handler {
+	h := &Handler{}
+	if db != nil {
+		h.db = db
+	}
+	if redisClient != nil {
+		h.redis = redisClient
+	}
+	return h
 }
 
 // HealthResponse is the JSON structure for health checks.
@@ -42,13 +54,21 @@ func (h *Handler) Liveness(w http.ResponseWriter, r *http.Request) {
 }
 
 // Readiness checks the database and cache connectivity.
+//
+// A dependency that was never wired up counts as not ready, not as absent.
+// Reporting "ready" for a process that booted without its database would tell a
+// load balancer to send it traffic that can only 500.
 func (h *Handler) Readiness(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	services := make(map[string]string)
 	healthy := true
 
 	// Check Postgres
-	if h.db != nil {
+	switch {
+	case h.db == nil:
+		services["postgres"] = "not_configured"
+		healthy = false
+	default:
 		if err := h.db.Ping(ctx); err != nil {
 			slog.Error("readiness check failed", "service", "postgres", "error", err)
 			services["postgres"] = "unhealthy"
@@ -59,7 +79,11 @@ func (h *Handler) Readiness(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check Redis
-	if h.redis != nil {
+	switch {
+	case h.redis == nil:
+		services["redis"] = "not_configured"
+		healthy = false
+	default:
 		if err := h.redis.Ping(ctx).Err(); err != nil {
 			slog.Error("readiness check failed", "service", "redis", "error", err)
 			services["redis"] = "unhealthy"

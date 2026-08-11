@@ -56,6 +56,10 @@ type Dependencies struct {
 	CORSAllowedOrigins []string
 	MaxBodyBytes       int64
 
+	// AllowPublicRegistration mounts POST /auth/register. Off outside
+	// development, where staff arrive by invitation instead.
+	AllowPublicRegistration bool
+
 	// Services
 	AuthService iamService.AuthService
 	RBACService iamService.RBACService
@@ -165,8 +169,22 @@ func New(deps Dependencies) *chi.Mux {
 		// Public auth routes (no JWT required)
 		r.Route("/auth", func(r chi.Router) {
 			if deps.IAMHandler != nil {
-				r.Post("/register", deps.IAMHandler.Register)
+				// Self-signup is mounted only where it is wanted. Not mounting
+				// it — rather than mounting a handler that refuses — means a
+				// deployment with invitations-only onboarding answers 404 and
+				// does not advertise an endpoint to probe.
+				if deps.AllowPublicRegistration {
+					r.Post("/register", deps.IAMHandler.Register)
+				}
 				r.Post("/login", deps.IAMHandler.Login)
+
+				// Invitation redemption. Public because the invitee has no
+				// account yet — the token is the credential — and under /auth
+				// because these calls create a login. Keeping them here also
+				// avoids a public branch inside the protected /invitations
+				// subtree below.
+				r.Get("/invitations/{token}", deps.IAMHandler.PreviewInvitation)
+				r.Post("/invitations/{token}/accept", deps.IAMHandler.AcceptInvitation)
 			}
 		})
 
@@ -199,6 +217,10 @@ func New(deps Dependencies) *chi.Mux {
 			// User routes
 			if deps.IAMHandler != nil {
 				r.Get("/me", deps.IAMHandler.GetMe)
+				// Lives under the protected group rather than /auth, despite
+				// the path: the account being changed is the one in the token,
+				// so a validated session is required, and /auth/* is public.
+				r.Post("/auth/change-password", deps.IAMHandler.ChangePassword)
 				r.With(maybeRequirePermission(deps.RBACService, "user:read")).Route("/users", func(r chi.Router) {
 					r.Get("/", deps.IAMHandler.ListUsers)
 					// A single user is only readable through a membership in the
@@ -206,7 +228,26 @@ func New(deps Dependencies) *chi.Mux {
 					// alone and would otherwise serve any account on the platform.
 					r.With(maybeRequireUserInOrg(deps, "id")).Get("/{id}", deps.IAMHandler.GetUser)
 				})
+				// The organization's assignable roles. user:read rather than
+				// user:write: choosing a role is part of reading the staff
+				// screens, and the write permission guards the assignment.
+				r.With(maybeRequirePermission(deps.RBACService, "user:read")).Get("/roles", deps.IAMHandler.ListRoles)
 				r.With(maybeRequirePermission(deps.RBACService, "user:write")).Post("/roles/assign", deps.IAMHandler.AssignRole)
+
+				// Staff invitations. Every route resolves its organization from
+				// the JWT claims, so these are flat rather than nested under
+				// /organizations/{orgId} — the same shape as the triage routes.
+				r.Route("/invitations", func(r chi.Router) {
+					r.With(maybeRequirePermission(deps.RBACService, "user:write")).
+						Post("/", deps.IAMHandler.CreateInvitation)
+					r.With(maybeRequirePermission(deps.RBACService, "user:read")).
+						Get("/", deps.IAMHandler.ListInvitations)
+					// Scoped to the caller's organization inside the update
+					// itself, so an id from another tenant matches no row and
+					// answers 404 rather than 403.
+					r.With(maybeRequirePermission(deps.RBACService, "user:write")).
+						Delete("/{invitationId}", deps.IAMHandler.RevokeInvitation)
+				})
 			}
 
 			// Organization routes
@@ -307,6 +348,22 @@ func New(deps Dependencies) *chi.Mux {
 						Delete("/{departmentId}", deps.TriageHandler.DeleteDepartment)
 				})
 
+				// The support roster. Reading it is user:read — the same
+				// permission GET /users needs, because it answers the same
+				// question about the same people, and the seeded agent role
+				// deliberately holds neither: an agent works their queue and
+				// does not get a directory of their colleagues.
+				//
+				// Writing an assignment is user:write rather than
+				// department:manage. The subject of the change is the person,
+				// not the department. Owners hold user:write; agents do not.
+				r.Route("/staff", func(r chi.Router) {
+					r.With(maybeRequirePermission(deps.RBACService, "user:read")).
+						Get("/", deps.TriageHandler.ListStaff)
+					r.With(maybeRequirePermission(deps.RBACService, "user:write")).
+						Put("/{userId}/department", deps.TriageHandler.AssignStaffDepartment)
+				})
+
 				r.Route("/customers", func(r chi.Router) {
 					r.Use(maybeRequirePermission(deps.RBACService, "customer:manage"))
 					r.Get("/", deps.TriageHandler.ListCustomers)
@@ -319,11 +376,21 @@ func New(deps Dependencies) *chi.Mux {
 						Post("/", deps.TriageHandler.CreateTicket)
 					r.With(maybeRequireAnyPermission(deps.RBACService, "ticket:read", "ticket:read_own")).
 						Get("/", deps.TriageHandler.ListTickets)
+					// Registered before /{ticketId} so chi does not read
+					// "summary" as a ticket id.
+					r.With(maybeRequireAnyPermission(deps.RBACService, "ticket:read", "ticket:read_own")).
+						Get("/summary", deps.TriageHandler.TicketSummary)
 
 					r.Route("/{ticketId}", func(r chi.Router) {
 						r.With(maybeRequireAnyPermission(deps.RBACService, "ticket:read", "ticket:read_own")).
 							Get("/", deps.TriageHandler.GetTicket)
-						r.With(maybeRequirePermission(deps.RBACService, "ticket:update")).
+						// ticket:reopen_own admits a customer, whose patch is then
+						// narrowed to resolved -> open on their own ticket (see
+						// usecase.checkCustomerPatch). Granting them
+						// ticket:update instead would hand them the priority and
+						// department fields — exactly what would make AI triage
+						// meaningless, since every request would arrive urgent.
+						r.With(maybeRequireAnyPermission(deps.RBACService, "ticket:update", "ticket:reopen_own")).
 							Patch("/", deps.TriageHandler.UpdateTicket)
 						r.With(maybeRequirePermission(deps.RBACService, "ticket:assign")).
 							Post("/assign", deps.TriageHandler.AssignTicket)

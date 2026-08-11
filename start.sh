@@ -12,7 +12,7 @@
 #   ./start.sh infra      — Sadece altyapı (Postgres, Redis, Kafka) + migration
 #   ./start.sh migrate    — Sadece migration
 #   ./start.sh install    — Frontend bağımlılıklarını kur (npm install)
-#   ./start.sh down       — Docker servislerini durdur
+#   ./start.sh down       — Her şeyi durdur (backend + frontend + Docker)
 #   ./start.sh logs       — Docker servis loglarını izle
 #   ./start.sh clean      — Infra + volume + build artefaktlarını temizle
 #   ./start.sh help       — Yardım
@@ -85,6 +85,45 @@ install_frontend_deps() {
 free_port() {
     local port=$1
     lsof -ti:"$port" 2>/dev/null | xargs kill -9 2>/dev/null || true
+}
+
+# Bir sürecin çalışma dizini proje ağacının altında mı?
+in_project_tree() {
+    local pid=$1 cwd
+    cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)
+    [[ -n "$cwd" && ( "$cwd" == "$ROOT_DIR" || "$cwd" == "$ROOT_DIR"/* ) ]]
+}
+
+# Bu projeye ait host süreçlerini bul (air, air'in derlediği binary, next dev).
+# Desen tek başına yeterince seçici değil — başka bir repoda da air ya da next
+# koşuyor olabilir — o yüzden adayları çalışma dizinine göre eliyoruz.
+project_pids() {
+    local pid
+    for pid in $(pgrep -f 'air -c \.air\.toml|tmp/server|next-server|next dev|npm run dev' 2>/dev/null); do
+        if [[ "$pid" != "$$" ]] && in_project_tree "$pid"; then
+            echo "$pid"
+        fi
+    done
+    return 0
+}
+
+# Önce nazikçe TERM, 5 saniye içinde kapanmayana KILL
+stop_pids() {
+    local pid alive i
+    (( $# > 0 )) || return 0
+
+    for pid in "$@"; do kill -TERM "$pid" 2>/dev/null || true; done
+
+    for i in $(seq 1 10); do
+        alive=0
+        for pid in "$@"; do
+            if kill -0 "$pid" 2>/dev/null; then alive=1; fi
+        done
+        if [[ $alive -eq 0 ]]; then return 0; fi
+        sleep 0.5
+    done
+
+    for pid in "$@"; do kill -KILL "$pid" 2>/dev/null || true; done
 }
 
 # Bir sürecin tüm alt ağacını sonlandır (air → server binary, npm → next gibi)
@@ -218,7 +257,42 @@ cmd_frontend() {
 cmd_infra()      { require_backend; (cd "$BACKEND_DIR" && ./dev.sh infra); }
 cmd_classifier() { require_backend; (cd "$BACKEND_DIR" && ./dev.sh classifier); }
 cmd_migrate() { require_backend; (cd "$BACKEND_DIR" && ./dev.sh migrate); }
-cmd_down()    { require_backend; (cd "$BACKEND_DIR" && ./dev.sh down); }
+# Host süreçleri (air + Go binary, next dev) — Docker'dan bağımsız çalışıyorlar,
+# bu yüzden `docker compose down` tek başına localhost'u susturmuyor.
+stop_local_stack() {
+    log_step "Uygulama süreçleri durduruluyor"
+
+    local pids=()
+    # shellcheck disable=SC2207
+    pids=($(project_pids))
+
+    if (( ${#pids[@]} > 0 )); then
+        log_info "Proje süreçleri bulundu: ${pids[*]}"
+        # air'i önce indir: yaşarsa binary'i anında yeniden doğurur.
+        stop_pids "${pids[@]}"
+    else
+        log_info "Çalışan proje süreci yok"
+    fi
+
+    # Emniyet kemeri: ağaçtan kopmuş ya da önceki koşudan artakalan port sahipleri.
+    local port
+    for port in "$BACKEND_PORT" "$FRONTEND_PORT"; do
+        if lsof -ti:"$port" &>/dev/null; then
+            log_warn "Port $port hâlâ dolu — zorla boşaltılıyor"
+            free_port "$port"
+        fi
+    done
+
+    log_ok "Uygulama süreçleri durduruldu (:$BACKEND_PORT, :$FRONTEND_PORT boşta)"
+}
+
+cmd_down() {
+    require_backend
+    stop_local_stack
+    (cd "$BACKEND_DIR" && ./dev.sh down)
+    log_ok "Her şey kapandı"
+}
+
 cmd_logs()    { require_backend; (cd "$BACKEND_DIR" && ./dev.sh logs); }
 
 cmd_install() {
@@ -230,6 +304,7 @@ cmd_install() {
 
 cmd_clean() {
     require_backend
+    stop_local_stack
     log_step "Temizlik"
     (cd "$BACKEND_DIR" && ./dev.sh clean)
     if [[ -d "$FRONTEND_DIR/.next" ]]; then
@@ -251,7 +326,7 @@ cmd_help() {
     echo -e "  ${GREEN}classifier${NC}    backend/ml model servisini derle ve başlat (opsiyonel)"
     echo -e "  ${GREEN}migrate${NC}       Sadece migration"
     echo -e "  ${GREEN}install${NC}       Frontend bağımlılıklarını kur"
-    echo -e "  ${GREEN}down${NC}          Docker servislerini durdur"
+    echo -e "  ${GREEN}down${NC}          Her şeyi durdur (backend + frontend + Docker)"
     echo -e "  ${GREEN}logs${NC}          Docker servis loglarını izle"
     echo -e "  ${GREEN}clean${NC}         Infra + volume + build artefaktlarını temizle"
     echo -e "  ${GREEN}help${NC}          Bu yardım metni"

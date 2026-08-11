@@ -16,9 +16,14 @@ import (
 type CreateTicketRequest struct {
 	Subject string `json:"subject" validate:"required,min=3"`
 	Body    string `json:"body" validate:"required"`
-	// CustomerID is required when an agent raises the ticket. A customer portal
-	// token would supply it instead, but that flow is not implemented yet.
-	CustomerID uuid.UUID `json:"customer_id" validate:"required"`
+	// CustomerID names the customer an agent is raising this ticket for.
+	//
+	// Deliberately not `validate:"required"`: a customer signing into the portal
+	// has no business stating who they are, and the use case takes their id from
+	// the token instead — a value the client supplies is a suggestion, not an
+	// identity. It stays required for staff, which CreateTicketUseCase.ownerFor
+	// enforces, because "required" here could not tell the two callers apart.
+	CustomerID uuid.UUID `json:"customer_id"`
 }
 
 // UpdateTicketRequest is the input for PATCH /tickets/{id}. Pointer fields keep
@@ -100,6 +105,14 @@ type TicketListItem struct {
 	CreatedAt            time.Time       `json:"created_at"`
 	UpdatedAt            time.Time       `json:"updated_at"`
 	ResolvedAt           *time.Time      `json:"resolved_at,omitempty"`
+
+	// Snippet is the opening message, truncated. A ticket has no description
+	// column — the first message is the description — so a list that wants to
+	// preview one either gets it here or issues a query per row.
+	Snippet string `json:"snippet,omitempty"`
+	// FirstResponseAt is when support first replied, excluding internal notes.
+	// Nil while nobody has answered yet.
+	FirstResponseAt *time.Time `json:"first_response_at,omitempty"`
 }
 
 // MessageInfo is one entry of a ticket's conversation.
@@ -150,4 +163,20 @@ type TicketDetail struct {
 	// in NeedsHumanReview, so read that for "was this flagged", and read this
 	// only to show where the line sits today.
 	ReviewThreshold float64 `json:"review_threshold"`
+}
+
+// TicketSummaryInfo is GET /tickets/summary: the handful of numbers the portal
+// dashboard shows, scoped to whoever asked.
+//
+// The two averages are minutes and null until there is something to average.
+// Null is the honest answer for a customer whose first ticket is still open;
+// zero would read as an instant reply.
+type TicketSummaryInfo struct {
+	Total                   int            `json:"total"`
+	Open                    int            `json:"open"`
+	WaitingCustomer         int            `json:"waiting_customer"`
+	Resolved                int            `json:"resolved"`
+	ByStatus                map[string]int `json:"by_status"`
+	AvgFirstResponseMinutes *float64       `json:"avg_first_response_minutes"`
+	AvgResolutionMinutes    *float64       `json:"avg_resolution_minutes"`
 }

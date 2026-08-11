@@ -45,5 +45,15 @@ func (uc *DeleteDepartmentUseCase) Execute(ctx context.Context, orgID, departmen
 		return err
 	}
 
+	/*
+		Staff are deliberately NOT moved with the tickets.
+
+		staff_departments cascades on delete (migration 00021), so the people on
+		this team come back unassigned and surface in the roster's Unassigned
+		bucket. That asymmetry is the point: a ticket has to belong somewhere or
+		it falls out of every queue, whereas a person placed on a team they were
+		never chosen for is a staffing decision made silently by a delete button.
+		Tickets get a safe default; people get a decision.
+	*/
 	return uc.departmentRepo.Delete(ctx, orgID, departmentID)
 }

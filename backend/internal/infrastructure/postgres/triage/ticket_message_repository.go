@@ -132,3 +132,91 @@ func scanTicketMessage(row rowScanner) (*model.TicketMessage, error) {
 	}
 	return &m, nil
 }
+
+// PreviewByTickets returns the opening message of each ticket, truncated.
+//
+// DISTINCT ON is what keeps this one query: Postgres picks the first row per
+// ticket_id under the given ORDER BY, so the whole page's previews come back in
+// a single index scan rather than a query per ticket.
+//
+// Truncation happens in SQL so a 4000-character description is never carried
+// over the wire just to be cut in Go. The ellipsis is added by the caller's
+// display layer if it wants one; the value here is plain text.
+func (r *TicketMessageRepo) PreviewByTickets(
+	ctx context.Context,
+	orgID uuid.UUID,
+	ticketIDs []uuid.UUID,
+	maxRunes int,
+) (map[uuid.UUID]string, error) {
+	previews := make(map[uuid.UUID]string)
+	if len(ticketIDs) == 0 || maxRunes <= 0 {
+		return previews, nil
+	}
+
+	rows, err := r.db.Query(ctx,
+		`SELECT DISTINCT ON (ticket_id) ticket_id, LEFT(body, $3)
+		 FROM ticket_messages
+		 WHERE organization_id = $1 AND ticket_id = ANY($2) AND is_internal = FALSE
+		 ORDER BY ticket_id, created_at ASC`,
+		orgID, ticketIDs, maxRunes,
+	)
+	if err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to load ticket previews", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ticketID uuid.UUID
+		var body string
+		if err := rows.Scan(&ticketID, &body); err != nil {
+			return nil, domainErr.New(domainErr.ErrInternal, "failed to scan ticket preview", err)
+		}
+		previews[ticketID] = body
+	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to iterate ticket previews", err)
+	}
+	return previews, nil
+}
+
+// FirstResponseByTickets returns when support first answered each ticket.
+//
+// "Support" excludes the customer's own follow-ups and internal notes: a note
+// the requester cannot see is not a response to them, and counting one would
+// make the response-time metric flatter than the experience it describes.
+func (r *TicketMessageRepo) FirstResponseByTickets(
+	ctx context.Context,
+	orgID uuid.UUID,
+	ticketIDs []uuid.UUID,
+) (map[uuid.UUID]time.Time, error) {
+	responses := make(map[uuid.UUID]time.Time)
+	if len(ticketIDs) == 0 {
+		return responses, nil
+	}
+
+	rows, err := r.db.Query(ctx,
+		`SELECT ticket_id, MIN(created_at)
+		 FROM ticket_messages
+		 WHERE organization_id = $1 AND ticket_id = ANY($2)
+		   AND author_type <> 'customer' AND is_internal = FALSE
+		 GROUP BY ticket_id`,
+		orgID, ticketIDs,
+	)
+	if err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to load first responses", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ticketID uuid.UUID
+		var at time.Time
+		if err := rows.Scan(&ticketID, &at); err != nil {
+			return nil, domainErr.New(domainErr.ErrInternal, "failed to scan first response", err)
+		}
+		responses[ticketID] = at
+	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to iterate first responses", err)
+	}
+	return responses, nil
+}

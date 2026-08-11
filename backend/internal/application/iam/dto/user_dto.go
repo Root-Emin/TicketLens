@@ -20,6 +20,17 @@ type LoginRequest struct {
 	Password string `json:"password" validate:"required"`
 }
 
+// ChangePasswordRequest is the input for POST /auth/change-password.
+//
+// The account comes from the token, never from the body: a user id here would
+// turn a self-service endpoint into a password reset for anybody. CurrentPassword
+// is required even though the caller is already authenticated — a stolen session
+// should not be enough to lock the real owner out.
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" validate:"required"`
+	NewPassword     string `json:"new_password" validate:"required,min=8"`
+}
+
 // LoginResponse is the output for successful login.
 type LoginResponse struct {
 	Token string   `json:"token"`
@@ -37,11 +48,15 @@ type UserInfo struct {
 }
 
 // AssignRoleRequest is the input for assigning a role to a user.
+//
+// No organization_id. The organization is the caller's, read from the token: a
+// body field here let a caller with user:write in one tenant grant a role in
+// another, and validating it against the token would only be a longer way of
+// saying the token wins.
 type AssignRoleRequest struct {
-	UserID         uuid.UUID  `json:"user_id" validate:"required"`
-	RoleID         uuid.UUID  `json:"role_id" validate:"required"`
-	OrganizationID uuid.UUID  `json:"organization_id" validate:"required"`
-	AppID          *uuid.UUID `json:"app_id,omitempty"`
+	UserID uuid.UUID  `json:"user_id" validate:"required"`
+	RoleID uuid.UUID  `json:"role_id" validate:"required"`
+	AppID  *uuid.UUID `json:"app_id,omitempty"`
 }
 
 // UpdateUserRequest is the input for updating a user.

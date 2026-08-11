@@ -23,6 +23,17 @@ __pycache__/
 .env.*.local
 !.env.example
 
+# The production environment file. It holds the only copy of the JWT signing key
+# and the database password, and is generated per host by scripts/gen-secrets.sh
+# from the committed .env.prod.example template.
+deployments/.env.prod
+
+# Deployment state that belongs to a host, not to the repository.
+# caddy/data holds the ACME account key and issued certificates; backup/dumps
+# holds customer data in the clear.
+deployments/caddy/data/
+deployments/backup/dumps/
+
 # Dependencies. A safety net for future workspaces — frontend/ anchors its own.
 node_modules/
 

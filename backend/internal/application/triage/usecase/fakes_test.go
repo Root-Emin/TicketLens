@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -31,6 +33,9 @@ type fakeTicketRepo struct {
 	// unchanged ticket alone instead of rewriting it.
 	updates   int
 	updateErr error
+	// lastFilter is what ListByOrg was called with, so a test can assert on the
+	// scoping the use case applied rather than only on the rows it got back.
+	lastFilter repository.TicketFilter
 }
 
 var _ repository.TicketRepository = (*fakeTicketRepo)(nil)
@@ -77,12 +82,22 @@ func (r *fakeTicketRepo) Delete(_ context.Context, _, id uuid.UUID) error {
 	return nil
 }
 
-func (r *fakeTicketRepo) ListByOrg(_ context.Context, orgID uuid.UUID, _ repository.TicketFilter, _, _ int) ([]*model.Ticket, int, error) {
+// ListByOrg honours TicketFilter.CustomerID and records the filter it was
+// given. The own-scope tests are precisely about whether the use case set that
+// field, so a fake that ignored it would pass while the real query leaked every
+// customer's tickets.
+func (r *fakeTicketRepo) ListByOrg(_ context.Context, orgID uuid.UUID, filter repository.TicketFilter, _, _ int) ([]*model.Ticket, int, error) {
+	r.lastFilter = filter
+
 	var out []*model.Ticket
 	for _, t := range r.tickets {
-		if t.OrganizationID == orgID {
-			out = append(out, t)
+		if t.OrganizationID != orgID {
+			continue
 		}
+		if filter.CustomerID != nil && t.CustomerID != *filter.CustomerID {
+			continue
+		}
+		out = append(out, t)
 	}
 	return out, len(out), nil
 }
@@ -182,6 +197,43 @@ func (r *fakeMessageRepo) CountByTickets(_ context.Context, _ uuid.UUID, ticketI
 	return counts, nil
 }
 
+// PreviewByTickets mirrors the real query: first non-internal message, cut to
+// maxRunes. An internal note must never become a ticket's public preview.
+func (r *fakeMessageRepo) PreviewByTickets(_ context.Context, _ uuid.UUID, ticketIDs []uuid.UUID, maxRunes int) (map[uuid.UUID]string, error) {
+	previews := map[uuid.UUID]string{}
+	for _, id := range ticketIDs {
+		for _, m := range r.byTicket[id] {
+			if m.IsInternal {
+				continue
+			}
+			body := m.Body
+			if len(body) > maxRunes {
+				body = body[:maxRunes]
+			}
+			previews[id] = body
+			break
+		}
+	}
+	return previews, nil
+}
+
+// FirstResponseByTickets mirrors the real query: earliest message that is
+// neither the customer's own nor an internal note.
+func (r *fakeMessageRepo) FirstResponseByTickets(_ context.Context, _ uuid.UUID, ticketIDs []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	responses := map[uuid.UUID]time.Time{}
+	for _, id := range ticketIDs {
+		for _, m := range r.byTicket[id] {
+			if m.IsInternal || m.AuthorType == model.AuthorTypeCustomer {
+				continue
+			}
+			if at, seen := responses[id]; !seen || m.CreatedAt.Before(at) {
+				responses[id] = m.CreatedAt
+			}
+		}
+	}
+	return responses, nil
+}
+
 // ---------------------------------------------------------------- departments
 
 type fakeDepartmentRepo struct {
@@ -270,6 +322,105 @@ func (r *fakeDepartmentRepo) Delete(_ context.Context, orgID, id uuid.UUID) erro
 	return notFoundErr("department")
 }
 
+// ---------------------------------------------------------------- staff
+
+// fakeStaffRepo is an in-memory support roster.
+//
+// Modelled on what the SQL actually does rather than on the interface alone:
+// members are the people the roster query would return (organization members
+// who are not customers), and assignments are the staff_departments rows. A
+// user absent from members does not exist as far as this repository is
+// concerned, which is how the real query treats both another tenant's accounts
+// and this tenant's portal customers — and that equivalence is the point of
+// several tests below.
+type fakeStaffRepo struct {
+	members []*model.StaffMember
+	// setCalls counts SetDepartment, so a test can assert a use case refused
+	// before writing rather than writing and then failing.
+	setCalls int
+	setErr   error
+}
+
+var _ repository.StaffRepository = (*fakeStaffRepo)(nil)
+
+func (r *fakeStaffRepo) find(orgID, userID uuid.UUID) *model.StaffMember {
+	for _, m := range r.members {
+		if m.UserID == userID && m.OrganizationID == orgID {
+			return m
+		}
+	}
+	return nil
+}
+
+func (r *fakeStaffRepo) ListByOrg(
+	_ context.Context,
+	orgID uuid.UUID,
+	filter repository.StaffFilter,
+	offset, limit int,
+) ([]*model.StaffMember, int, error) {
+	var matched []*model.StaffMember
+	for _, m := range r.members {
+		if m.OrganizationID != orgID {
+			continue
+		}
+		if filter.Unassigned && m.DepartmentID != nil {
+			continue
+		}
+		if !filter.Unassigned && filter.DepartmentID != nil {
+			if m.DepartmentID == nil || *m.DepartmentID != *filter.DepartmentID {
+				continue
+			}
+		}
+		if filter.Query != "" && !strings.Contains(
+			strings.ToLower(m.FullName()+" "+m.Email), strings.ToLower(filter.Query),
+		) {
+			continue
+		}
+		matched = append(matched, m)
+	}
+
+	total := len(matched)
+	if offset >= total {
+		return nil, total, nil
+	}
+	end := offset + limit
+	if limit <= 0 || end > total {
+		end = total
+	}
+	return matched[offset:end], total, nil
+}
+
+func (r *fakeStaffRepo) GetByUser(_ context.Context, orgID, userID uuid.UUID) (*model.StaffMember, error) {
+	if m := r.find(orgID, userID); m != nil {
+		return m, nil
+	}
+	return nil, notFoundErr("staff member")
+}
+
+func (r *fakeStaffRepo) SetDepartment(_ context.Context, orgID, userID uuid.UUID, departmentID *uuid.UUID) error {
+	r.setCalls++
+	if r.setErr != nil {
+		return r.setErr
+	}
+	m := r.find(orgID, userID)
+	if m == nil {
+		return notFoundErr("staff member")
+	}
+	m.DepartmentID = departmentID
+	m.DepartmentName = ""
+	return nil
+}
+
+func (r *fakeStaffRepo) CountByDepartment(_ context.Context, orgID uuid.UUID) (map[uuid.UUID]int, error) {
+	counts := make(map[uuid.UUID]int)
+	for _, m := range r.members {
+		if m.OrganizationID == orgID && m.DepartmentID != nil {
+			counts[*m.DepartmentID]++
+		}
+	}
+	return counts, nil
+}
+
 // ---------------------------------------------------------------- customers
 
 type fakeCustomerRepo struct {
@@ -298,6 +449,15 @@ func (r *fakeCustomerRepo) GetByID(_ context.Context, orgID, id uuid.UUID) (*mod
 func (r *fakeCustomerRepo) GetByEmail(_ context.Context, orgID uuid.UUID, email string) (*model.Customer, error) {
 	for _, c := range r.customers {
 		if c.Email == email && c.OrganizationID == orgID {
+			return c, nil
+		}
+	}
+	return nil, notFoundErr("customer")
+}
+
+func (r *fakeCustomerRepo) GetByUserID(_ context.Context, orgID, userID uuid.UUID) (*model.Customer, error) {
+	for _, c := range r.customers {
+		if c.OrganizationID == orgID && c.UserID != nil && *c.UserID == userID {
 			return c, nil
 		}
 	}
@@ -457,6 +617,16 @@ func (r *fakeUserRepo) Update(_ context.Context, u *iamModel.User) error {
 	for i, existing := range r.users {
 		if existing.ID == u.ID {
 			r.users[i] = u
+			return nil
+		}
+	}
+	return notFoundErr("user")
+}
+
+func (r *fakeUserRepo) UpdatePassword(_ context.Context, userID uuid.UUID, hash string) error {
+	for _, u := range r.users {
+		if u.ID == userID {
+			u.PasswordHash = hash
 			return nil
 		}
 	}

@@ -27,11 +27,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-train = [
+# What TorchBackend (serve.py) needs to load a checkpoint and answer /classify.
+# Split out of `train` so the runtime image is not carrying accelerate and the
+# rest of the training stack: the base install alone cannot serve a model at
+# all — load_backend picks TorchBackend as soon as a model.pt is present, and
+# its import of torch would fail at startup.
+serve = [
   "torch>=2.2",
   "transformers>=4.45",
-  "accelerate>=0.34",
   "sentencepiece>=0.2",
+]
+train = [
+  "ticketlens-ml[serve]",
+  "accelerate>=0.34",
 ]
 dev = [
   "pytest>=8.0",

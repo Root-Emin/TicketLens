@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Root-Emin/TicketLens/internal/domain/iam/model"
+	"github.com/Root-Emin/TicketLens/internal/shared/database"
 	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -27,7 +28,7 @@ func (r *OrgUserRepo) Add(ctx context.Context, orgUser *model.OrganizationUser) 
 	orgUser.CreatedAt = now
 	orgUser.UpdatedAt = now
 
-	_, err := r.db.Exec(ctx,
+	_, err := database.Querier(ctx, r.db).Exec(ctx,
 		`INSERT INTO organization_users (organization_id, user_id, status, invited_by, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT (organization_id, user_id) DO UPDATE SET status=$3, updated_at=$6`,
@@ -40,7 +41,7 @@ func (r *OrgUserRepo) Add(ctx context.Context, orgUser *model.OrganizationUser) 
 }
 
 func (r *OrgUserRepo) Remove(ctx context.Context, orgID, userID uuid.UUID) error {
-	_, err := r.db.Exec(ctx,
+	_, err := database.Querier(ctx, r.db).Exec(ctx,
 		`DELETE FROM organization_users WHERE organization_id=$1 AND user_id=$2`, orgID, userID,
 	)
 	if err != nil {
@@ -51,7 +52,7 @@ func (r *OrgUserRepo) Remove(ctx context.Context, orgID, userID uuid.UUID) error
 
 func (r *OrgUserRepo) GetByOrgAndUser(ctx context.Context, orgID, userID uuid.UUID) (*model.OrganizationUser, error) {
 	var ou model.OrganizationUser
-	err := r.db.QueryRow(ctx,
+	err := database.Querier(ctx, r.db).QueryRow(ctx,
 		`SELECT organization_id, user_id, status, invited_by, created_at, updated_at
 		 FROM organization_users WHERE organization_id=$1 AND user_id=$2`, orgID, userID,
 	).Scan(&ou.OrganizationID, &ou.UserID, &ou.Status, &ou.InvitedBy, &ou.CreatedAt, &ou.UpdatedAt)
@@ -66,14 +67,14 @@ func (r *OrgUserRepo) GetByOrgAndUser(ctx context.Context, orgID, userID uuid.UU
 
 func (r *OrgUserRepo) ListByOrg(ctx context.Context, orgID uuid.UUID, offset, limit int) ([]*model.OrganizationUser, int, error) {
 	var total int
-	err := r.db.QueryRow(ctx,
+	err := database.Querier(ctx, r.db).QueryRow(ctx,
 		`SELECT COUNT(*) FROM organization_users WHERE organization_id=$1`, orgID,
 	).Scan(&total)
 	if err != nil {
 		return nil, 0, domainErr.New(domainErr.ErrInternal, "failed to count org users", err)
 	}
 
-	rows, err := r.db.Query(ctx,
+	rows, err := database.Querier(ctx, r.db).Query(ctx,
 		`SELECT organization_id, user_id, status, invited_by, created_at, updated_at
 		 FROM organization_users WHERE organization_id=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
 		orgID, limit, offset,
@@ -95,7 +96,7 @@ func (r *OrgUserRepo) ListByOrg(ctx context.Context, orgID uuid.UUID, offset, li
 }
 
 func (r *OrgUserRepo) ListByUser(ctx context.Context, userID uuid.UUID) ([]*model.OrganizationUser, error) {
-	rows, err := r.db.Query(ctx,
+	rows, err := database.Querier(ctx, r.db).Query(ctx,
 		`SELECT organization_id, user_id, status, invited_by, created_at, updated_at
 		 FROM organization_users WHERE user_id=$1 ORDER BY created_at DESC`, userID,
 	)

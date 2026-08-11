@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const customerColumns = `id, organization_id, email, full_name, company, created_at`
+const customerColumns = `id, organization_id, user_id, email, full_name, company, created_at`
 
 // CustomerRepo implements repository.CustomerRepository with PostgreSQL.
 type CustomerRepo struct {
@@ -35,10 +35,10 @@ func (r *CustomerRepo) Create(ctx context.Context, customer *model.Customer) err
 	customer.CreatedAt = time.Now().UTC()
 
 	_, err := r.db.Exec(ctx,
-		`INSERT INTO customers (id, organization_id, email, full_name, company, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		customer.ID, customer.OrganizationID, customer.Email, customer.FullName,
-		customer.Company, customer.CreatedAt,
+		`INSERT INTO customers (id, organization_id, user_id, email, full_name, company, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		customer.ID, customer.OrganizationID, customer.UserID, customer.Email,
+		customer.FullName, customer.Company, customer.CreatedAt,
 	)
 	if err != nil {
 		return domainErr.New(domainErr.ErrInternal, "failed to create customer", err)
@@ -57,6 +57,16 @@ func (r *CustomerRepo) GetByEmail(ctx context.Context, orgID uuid.UUID, email st
 	return r.getOne(ctx,
 		`SELECT `+customerColumns+` FROM customers WHERE organization_id = $1 AND email = $2`,
 		"failed to get customer by email", orgID, email,
+	)
+}
+
+// GetByUserID resolves the customer a login belongs to, within one
+// organization. The partial unique index on (organization_id, user_id)
+// guarantees at most one row, so no ordering is needed to make this stable.
+func (r *CustomerRepo) GetByUserID(ctx context.Context, orgID, userID uuid.UUID) (*model.Customer, error) {
+	return r.getOne(ctx,
+		`SELECT `+customerColumns+` FROM customers WHERE organization_id = $1 AND user_id = $2`,
+		"failed to get customer by user", orgID, userID,
 	)
 }
 
@@ -132,9 +142,9 @@ func (r *CustomerRepo) ListByIDs(ctx context.Context, orgID uuid.UUID, ids []uui
 
 func (r *CustomerRepo) Update(ctx context.Context, customer *model.Customer) error {
 	tag, err := r.db.Exec(ctx,
-		`UPDATE customers SET email=$1, full_name=$2, company=$3
-		 WHERE organization_id=$4 AND id=$5`,
-		customer.Email, customer.FullName, customer.Company,
+		`UPDATE customers SET email=$1, full_name=$2, company=$3, user_id=$4
+		 WHERE organization_id=$5 AND id=$6`,
+		customer.Email, customer.FullName, customer.Company, customer.UserID,
 		customer.OrganizationID, customer.ID,
 	)
 	if err != nil {
@@ -173,7 +183,7 @@ func (r *CustomerRepo) getOne(ctx context.Context, query, failMsg string, args .
 func scanCustomer(row rowScanner) (*model.Customer, error) {
 	var c model.Customer
 	if err := row.Scan(
-		&c.ID, &c.OrganizationID, &c.Email, &c.FullName, &c.Company, &c.CreatedAt,
+		&c.ID, &c.OrganizationID, &c.UserID, &c.Email, &c.FullName, &c.Company, &c.CreatedAt,
 	); err != nil {
 		return nil, err
 	}

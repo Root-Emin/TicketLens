@@ -20,6 +20,8 @@ type Config struct {
 	WebSocket  WebSocketConfig
 	Log        LogConfig
 	Classifier ClassifierConfig
+	Onboarding OnboardingConfig
+	Mail       MailConfig
 }
 
 // Recognized values for APP_ENV.
@@ -73,8 +75,56 @@ func (c *Config) Validate() error {
 	if len(c.Server.CORSAllowedOrigins) == 0 {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS must list explicit origins for APP_ENV=%s", c.Env)
 	}
+	// Invitation links are useless if they point at localhost: the recipient
+	// opens them on their own machine. Catching it here beats discovering it
+	// from the first invitation somebody cannot accept.
+	if strings.Contains(c.Onboarding.PublicAppURL, "localhost") {
+		return fmt.Errorf("PUBLIC_APP_URL is still %q for APP_ENV=%s; invitation links must point at the public address",
+			c.Onboarding.PublicAppURL, c.Env)
+	}
 
 	return nil
+}
+
+// Warnings lists configurations that are legal but worth flagging at startup.
+//
+// Kept apart from Validate on purpose: these must not stop a boot. The
+// single-host deployment reaches Postgres over a private compose network where
+// sslmode=disable is a reasonable choice, but the same setting against a
+// managed database would put every tenant's rows on the wire in the clear —
+// and that is worth a line in the log either way.
+func (c *Config) Warnings() []string {
+	var out []string
+
+	if c.Env == EnvProduction && c.Database.SSLMode == "disable" {
+		out = append(out, fmt.Sprintf(
+			"DB_SSLMODE=disable with APP_ENV=%s: the database link is unencrypted. "+
+				"Acceptable only while DB_HOST (%q) is on a private network you control; "+
+				"set DB_SSLMODE=require for a managed or remote database.",
+			c.Env, c.Database.Host))
+	}
+
+	if c.Env != EnvDevelopment && c.Onboarding.AllowPublicRegistration {
+		out = append(out, fmt.Sprintf(
+			"ALLOW_PUBLIC_REGISTRATION=true with APP_ENV=%s: anyone on the internet can create "+
+				"a platform account. Staff should arrive through invitations instead.", c.Env))
+	}
+
+	if c.Env != EnvDevelopment && !c.Mail.Enabled() {
+		out = append(out, fmt.Sprintf(
+			"SMTP_HOST is unset with APP_ENV=%s: invitation emails are written to this log "+
+				"instead of being delivered, tokens included. Administrators must pass the "+
+				"link from the API response by hand until a relay is configured.", c.Env))
+	}
+
+	if c.Env != EnvDevelopment && c.Database.AutoMigrate {
+		out = append(out, fmt.Sprintf(
+			"DB_AUTO_MIGRATE=true with APP_ENV=%s: this server will alter the schema at boot. "+
+				"Run migrations as a deploy step (cmd/migrate) and leave this off.",
+			c.Env))
+	}
+
+	return out
 }
 
 // WebSocketConfig holds real-time WebSocket settings.
@@ -107,6 +157,13 @@ type DatabaseConfig struct {
 	SSLMode  string
 	MaxConns int32
 	MinConns int32
+
+	// AutoMigrate applies pending migrations during server startup. True in
+	// development so a fresh checkout serves without a separate step; false
+	// everywhere else, where migrations are a deploy stage of their own (see
+	// cmd/migrate). A server that finds pending migrations with this off
+	// refuses to start rather than serve against a schema it does not match.
+	AutoMigrate bool
 }
 
 // DSN returns the PostgreSQL connection string with escaped credentials.
@@ -178,6 +235,44 @@ type ClassifierConfig struct {
 	FallbackToStub bool
 }
 
+// OnboardingConfig governs how accounts come into existence.
+type OnboardingConfig struct {
+	// AllowPublicRegistration exposes POST /auth/register to the internet.
+	//
+	// True in development, where seeding and ./start.sh depend on it. False
+	// everywhere else: staff arrive by invitation, and an open registration
+	// endpoint on a multi-tenant deployment lets anyone create a platform
+	// account. The route is not merely refused when this is off — it is not
+	// mounted, so it answers 404 rather than advertising that it exists.
+	AllowPublicRegistration bool
+
+	// PublicAppURL is the browser-facing base of the frontend, used to build
+	// invitation links. It is the address a recipient must be able to open, so
+	// it is the public hostname and never the internal service name.
+	PublicAppURL string
+
+	// InvitationTTL is how long an invitation link stays redeemable.
+	InvitationTTL time.Duration
+}
+
+// MailConfig holds outbound email settings.
+//
+// An empty Host selects the logging mailer, which writes messages to the log
+// instead of delivering them — the same shape as an empty CLASSIFIER_URL
+// selecting the keyword stub. That keeps development and tests free of a mail
+// server while making the absence visible in the log.
+type MailConfig struct {
+	Host     string
+	Port     int
+	Username string
+	Password string
+	From     string
+	Timeout  time.Duration
+}
+
+// Enabled reports whether a real relay is configured.
+func (m MailConfig) Enabled() bool { return m.Host != "" }
+
 // defaultDBPassword is the local-development database password baked into
 // docker-compose. Rejected outside development by Validate.
 const defaultDBPassword = "masterfabric"
@@ -187,8 +282,10 @@ const defaultDBPassword = "masterfabric"
 // Defaults target local development. Call Validate before serving traffic to
 // reject those defaults in any other environment.
 func Load() *Config {
+	env := envOrDefault("APP_ENV", EnvDevelopment)
+
 	return &Config{
-		Env: envOrDefault("APP_ENV", EnvDevelopment),
+		Env: env,
 		Server: ServerConfig{
 			Host:               envOrDefault("SERVER_HOST", "0.0.0.0"),
 			Port:               envOrDefaultInt("SERVER_PORT", 8080),
@@ -207,6 +304,10 @@ func Load() *Config {
 			SSLMode:  envOrDefault("DB_SSLMODE", "disable"),
 			MaxConns: envOrDefaultInt32("DB_MAX_CONNS", 25),
 			MinConns: envOrDefaultInt32("DB_MIN_CONNS", 5),
+			// The default follows the environment rather than being a fixed
+			// literal: development keeps its one-command start, and a
+			// deployment has to opt in to letting the server touch the schema.
+			AutoMigrate: envOrDefaultBool("DB_AUTO_MIGRATE", env == EnvDevelopment),
 		},
 		Redis: RedisConfig{
 			Host:     envOrDefault("REDIS_HOST", "localhost"),
@@ -237,6 +338,22 @@ func Load() *Config {
 			Level:  envOrDefault("LOG_LEVEL", "info"),
 			Format: envOrDefault("LOG_FORMAT", "json"),
 		},
+		Onboarding: OnboardingConfig{
+			// Environment-dependent default, like DB_AUTO_MIGRATE: development
+			// keeps its one-command start, and a deployment has to opt in to
+			// leaving registration open.
+			AllowPublicRegistration: envOrDefaultBool("ALLOW_PUBLIC_REGISTRATION", env == EnvDevelopment),
+			PublicAppURL:            envOrDefault("PUBLIC_APP_URL", "http://localhost:3000"),
+			InvitationTTL:           time.Duration(envOrDefaultInt("INVITATION_TTL_HOURS", 168)) * time.Hour,
+		},
+		Mail: MailConfig{
+			Host:     envOrDefault("SMTP_HOST", ""),
+			Port:     envOrDefaultInt("SMTP_PORT", 587),
+			Username: envOrDefault("SMTP_USERNAME", ""),
+			Password: envOrDefault("SMTP_PASSWORD", ""),
+			From:     envOrDefault("SMTP_FROM", "TicketLens <no-reply@localhost>"),
+			Timeout:  time.Duration(envOrDefaultInt("SMTP_TIMEOUT_SECONDS", 10)) * time.Second,
+		},
 		Classifier: ClassifierConfig{
 			ReviewThreshold: envOrDefaultFloat("CLASSIFIER_REVIEW_THRESHOLD", 0.60),
 			URL:             envOrDefault("CLASSIFIER_URL", ""),
@@ -251,6 +368,18 @@ func envOrDefaultFloat(key string, defaultVal float64) float64 {
 	if v := os.Getenv(key); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			return f
+		}
+	}
+	return defaultVal
+}
+
+// envOrDefaultBool parses a boolean setting whose default is not a fixed
+// literal. The `envOrDefault(key, "false") == "true"` idiom used elsewhere
+// cannot express that, since it bakes the default into the comparison.
+func envOrDefaultBool(key string, defaultVal bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
 		}
 	}
 	return defaultVal

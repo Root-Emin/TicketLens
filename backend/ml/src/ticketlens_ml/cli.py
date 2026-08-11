@@ -57,6 +57,33 @@ def prepare_eval_cmd(
     print(f"[green]Wrote {path}[/green] — fill category/priority per relabel_guide.md")
 
 
+@app.command("external-english")
+def external_english_cmd(
+    raw_dir: Path = typer.Option(
+        Path("data/external/customer-support-tickets/raw"), exists=True
+    ),
+    out_dir: Path = typer.Option(
+        Path("data/external/customer-support-tickets/normalized")
+    ),
+    dedupe: bool = typer.Option(True, help="Drop rows whose body was already seen"),
+):
+    """Filter the external Kaggle corpus down to its English rows."""
+    from ticketlens_ml.external_english import filter_english
+
+    path, report = filter_english(raw_dir, out_dir, dedupe=dedupe)
+
+    for f in report.files:
+        langs = ", ".join(f"{k}={v:,}" for k, v in sorted(f.languages.items()))
+        note = "" if f.english else "  [yellow](no English rows)[/yellow]"
+        print(f"  {f.name}: {f.rows:,} rows → kept {f.kept:,}{note}")
+        print(f"    languages: {langs}")
+
+    print(
+        f"[green]Wrote {report.total_kept:,} English rows → {path}[/green] "
+        f"({report.total_duplicates:,} duplicates dropped)"
+    )
+
+
 @app.command()
 def evaluate(
     test: Path = typer.Option(..., exists=True),

@@ -183,3 +183,70 @@ func (r *StatsRepo) Overview(ctx context.Context, orgID uuid.UUID, from, to time
 
 	return overview, nil
 }
+
+// Summary aggregates one organization's tickets, narrowed to a single customer
+// when customerID is non-nil.
+//
+// Three queries rather than one: the status counts and the two averages have
+// different denominators, and folding them together would need FILTER clauses
+// whose NULL handling is easy to get subtly wrong. Each is indexed on
+// (organization_id, customer_id).
+//
+// The averages come back NULL when nothing qualifies, which is what the
+// pointers preserve — a customer who has never had a ticket resolved has no
+// average response time, and reporting 0 would claim an instant answer.
+func (r *StatsRepo) Summary(ctx context.Context, orgID uuid.UUID, customerID *uuid.UUID) (*repository.TicketSummary, error) {
+	summary := &repository.TicketSummary{ByStatus: make(map[model.TicketStatus]int)}
+
+	// $2 is NULL for the organization-wide view, which disables the predicate.
+	const scoped = `organization_id = $1 AND ($2::uuid IS NULL OR customer_id = $2)`
+
+	rows, err := r.db.Query(ctx,
+		`SELECT status, COUNT(*) FROM tickets WHERE `+scoped+` GROUP BY status`,
+		orgID, customerID,
+	)
+	if err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to summarize tickets", err)
+	}
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			rows.Close()
+			return nil, domainErr.New(domainErr.ErrInternal, "failed to scan summary count", err)
+		}
+		summary.ByStatus[model.TicketStatus(status)] = count
+		summary.Total += count
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to iterate summary counts", err)
+	}
+
+	// Mean minutes from a ticket being raised to the first reply that was not
+	// the customer's own and not an internal note — the clock a requester
+	// actually experiences.
+	if err := r.db.QueryRow(ctx,
+		`SELECT AVG(EXTRACT(EPOCH FROM (first_reply.created_at - t.created_at)) / 60)
+		 FROM tickets t
+		 JOIN LATERAL (
+		     SELECT m.created_at FROM ticket_messages m
+		     WHERE m.ticket_id = t.id AND m.author_type <> 'customer' AND m.is_internal = FALSE
+		     ORDER BY m.created_at ASC LIMIT 1
+		 ) AS first_reply ON TRUE
+		 WHERE t.`+scoped,
+		orgID, customerID,
+	).Scan(&summary.AvgFirstResponse); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to average first response time", err)
+	}
+
+	if err := r.db.QueryRow(ctx,
+		`SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 60)
+		 FROM tickets WHERE `+scoped+` AND resolved_at IS NOT NULL`,
+		orgID, customerID,
+	).Scan(&summary.AvgResolution); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to average resolution time", err)
+	}
+
+	return summary, nil
+}

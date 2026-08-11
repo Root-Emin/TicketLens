@@ -64,7 +64,7 @@ func TestCreateTicket_WritesBothInsideTransaction(t *testing.T) {
 		Subject:    "Cannot log in",
 		Body:       "The password reset email never arrives.",
 		CustomerID: customerID,
-	})
+	}, OrgWideScope())
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestCreateTicket_FailedMessageWriteSurfacesAndSkipsEvent(t *testing.T) {
 		Subject:    "Broken export",
 		Body:       "Excel export throws an error.",
 		CustomerID: customerID,
-	})
+	}, OrgWideScope())
 	if err == nil {
 		t.Fatal("expected an error when the first message cannot be written")
 	}

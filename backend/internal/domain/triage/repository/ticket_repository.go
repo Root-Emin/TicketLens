@@ -14,6 +14,11 @@ const (
 	SortCreatedAtDesc = "-created_at"
 	SortPriorityAsc   = "priority"
 	SortPriorityDesc  = "-priority"
+	// Recently-active ordering. The customer portal offers it because "what
+	// moved" is the question someone tracking their own requests is asking,
+	// which is not the same as "what is newest".
+	SortUpdatedAtAsc  = "updated_at"
+	SortUpdatedAtDesc = "-updated_at"
 )
 
 // TicketFilter holds the optional, combinable filters of the ticket queue.

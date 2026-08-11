@@ -24,6 +24,11 @@ type RoleRepository interface {
 	AssignRoleToUser(ctx context.Context, userRole *model.UserRole) error
 	RemoveRoleFromUser(ctx context.Context, userID, roleID uuid.UUID) error
 	GetUserRoles(ctx context.Context, userID, orgID uuid.UUID) ([]*model.UserRole, error)
+	// GetUserRoleNames returns the names of the roles a user holds in an
+	// organization. GetUserRoles returns assignments, which carry role ids and
+	// not names; a client that has to tell a customer from an agent needs the
+	// names, and resolving them one id at a time is a needless round trip.
+	GetUserRoleNames(ctx context.Context, userID, orgID uuid.UUID) ([]string, error)
 	GetUserPermissions(ctx context.Context, userID, orgID uuid.UUID) ([]string, error)
 
 	// GetPrimaryOrganization returns the organization a user belongs to, based on

@@ -30,13 +30,29 @@ func NewGetTicketUseCase(
 	}
 }
 
-// Execute fetches a ticket. The repository is organization-scoped, so a ticket
-// belonging to another tenant surfaces as not-found rather than forbidden —
-// the API must not leak that the row exists.
-func (uc *GetTicketUseCase) Execute(ctx context.Context, orgID, ticketID uuid.UUID, includeInternal bool) (*dto.TicketDetail, error) {
+// Execute fetches a ticket.
+//
+// Two boundaries are enforced here and both answer not-found rather than
+// forbidden, because the API must not confirm that a row it will not show you
+// exists:
+//
+//   - the repository is organization-scoped, so another tenant's ticket is
+//     already invisible;
+//   - the scope guard rejects a ticket that belongs to a different customer.
+//
+// Scoping the list without scoping this would leave the queue private and the
+// detail wide open — a customer could still read any ticket by putting its id
+// in the URL.
+//
+// Whether internal notes are included comes from the scope too, so a customer
+// cannot receive one through a caller that forgot to pass the flag.
+func (uc *GetTicketUseCase) Execute(ctx context.Context, orgID, ticketID uuid.UUID, scope Scope) (*dto.TicketDetail, error) {
 	ticket, err := uc.ticketRepo.GetByID(ctx, orgID, ticketID)
 	if err != nil {
 		return nil, err
 	}
-	return uc.assembler.toDetail(ctx, orgID, ticket, includeInternal)
+	if err := scope.Guard(ticket); err != nil {
+		return nil, err
+	}
+	return uc.assembler.toDetail(ctx, orgID, ticket, scope.IncludesInternalNotes())
 }

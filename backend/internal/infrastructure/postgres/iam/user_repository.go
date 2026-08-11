@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Root-Emin/TicketLens/internal/domain/iam/model"
+	"github.com/Root-Emin/TicketLens/internal/shared/database"
 	domainErr "github.com/Root-Emin/TicketLens/internal/shared/errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -30,7 +31,7 @@ func (r *UserRepo) Create(ctx context.Context, user *model.User) error {
 	user.CreatedAt = now
 	user.UpdatedAt = now
 
-	_, err := r.db.Exec(ctx,
+	_, err := database.Querier(ctx, r.db).Exec(ctx,
 		`INSERT INTO users (id, email, password_hash, first_name, last_name, status, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		user.ID, user.Email, user.PasswordHash, user.FirstName, user.LastName, user.Status, user.CreatedAt, user.UpdatedAt,
@@ -43,7 +44,7 @@ func (r *UserRepo) Create(ctx context.Context, user *model.User) error {
 
 func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.User, error) {
 	var u model.User
-	err := r.db.QueryRow(ctx,
+	err := database.Querier(ctx, r.db).QueryRow(ctx,
 		`SELECT id, email, password_hash, first_name, last_name, status, created_at, updated_at
 		 FROM users WHERE id = $1`, id,
 	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.FirstName, &u.LastName, &u.Status, &u.CreatedAt, &u.UpdatedAt)
@@ -58,7 +59,7 @@ func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.User, erro
 
 func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*model.User, error) {
 	var u model.User
-	err := r.db.QueryRow(ctx,
+	err := database.Querier(ctx, r.db).QueryRow(ctx,
 		`SELECT id, email, password_hash, first_name, last_name, status, created_at, updated_at
 		 FROM users WHERE email = $1`, email,
 	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.FirstName, &u.LastName, &u.Status, &u.CreatedAt, &u.UpdatedAt)
@@ -73,7 +74,7 @@ func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*model.User, e
 
 func (r *UserRepo) Update(ctx context.Context, user *model.User) error {
 	user.UpdatedAt = time.Now().UTC()
-	_, err := r.db.Exec(ctx,
+	_, err := database.Querier(ctx, r.db).Exec(ctx,
 		`UPDATE users SET email=$1, first_name=$2, last_name=$3, status=$4, updated_at=$5 WHERE id=$6`,
 		user.Email, user.FirstName, user.LastName, user.Status, user.UpdatedAt, user.ID,
 	)
@@ -83,8 +84,31 @@ func (r *UserRepo) Update(ctx context.Context, user *model.User) error {
 	return nil
 }
 
+// UpdatePassword replaces a user's password hash.
+//
+// Note what Update above does not do: it never writes password_hash. That is
+// intentional — see the interface comment — and it is why this exists rather
+// than the change-password use case calling Update and quietly succeeding
+// without changing anything.
+//
+// RowsAffected is checked because a password change that matched no row must
+// not report success; the caller has been told their credential changed.
+func (r *UserRepo) UpdatePassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
+	tag, err := database.Querier(ctx, r.db).Exec(ctx,
+		`UPDATE users SET password_hash=$1, updated_at=$2 WHERE id=$3`,
+		passwordHash, time.Now().UTC(), userID,
+	)
+	if err != nil {
+		return domainErr.New(domainErr.ErrInternal, "failed to update password", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domainErr.New(domainErr.ErrNotFound, "user not found", nil)
+	}
+	return nil
+}
+
 func (r *UserRepo) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := r.db.Exec(ctx, `DELETE FROM users WHERE id=$1`, id)
+	_, err := database.Querier(ctx, r.db).Exec(ctx, `DELETE FROM users WHERE id=$1`, id)
 	if err != nil {
 		return domainErr.New(domainErr.ErrInternal, "failed to delete user", err)
 	}
@@ -93,12 +117,12 @@ func (r *UserRepo) Delete(ctx context.Context, id uuid.UUID) error {
 
 func (r *UserRepo) List(ctx context.Context, offset, limit int) ([]*model.User, int, error) {
 	var total int
-	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&total)
+	err := database.Querier(ctx, r.db).QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&total)
 	if err != nil {
 		return nil, 0, domainErr.New(domainErr.ErrInternal, "failed to count users", err)
 	}
 
-	rows, err := r.db.Query(ctx,
+	rows, err := database.Querier(ctx, r.db).Query(ctx,
 		`SELECT id, email, password_hash, first_name, last_name, status, created_at, updated_at
 		 FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset,
 	)
@@ -124,7 +148,7 @@ func (r *UserRepo) List(ctx context.Context, offset, limit int) ([]*model.User, 
 // may hold several roles in the same organization, hence DISTINCT.
 func (r *UserRepo) ListByOrganization(ctx context.Context, orgID uuid.UUID, offset, limit int) ([]*model.User, int, error) {
 	var total int
-	err := r.db.QueryRow(ctx,
+	err := database.Querier(ctx, r.db).QueryRow(ctx,
 		`SELECT COUNT(DISTINCT ur.user_id) FROM user_roles ur WHERE ur.organization_id = $1`,
 		orgID,
 	).Scan(&total)
@@ -132,7 +156,7 @@ func (r *UserRepo) ListByOrganization(ctx context.Context, orgID uuid.UUID, offs
 		return nil, 0, domainErr.New(domainErr.ErrInternal, "failed to count organization users", err)
 	}
 
-	rows, err := r.db.Query(ctx,
+	rows, err := database.Querier(ctx, r.db).Query(ctx,
 		`SELECT DISTINCT u.id, u.email, u.password_hash, u.first_name, u.last_name,
 		        u.status, u.created_at, u.updated_at
 		 FROM users u

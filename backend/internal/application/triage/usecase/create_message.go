@@ -25,18 +25,36 @@ func NewCreateMessageUseCase(
 
 // Execute appends a message.
 //
-// authorType and authorID are supplied by the caller from the authenticated
-// token — never from the request body — so a client cannot post as somebody
-// else.
+// Authorship is derived from the scope, never from the request body: a customer
+// writes as themselves on their own ticket, and everybody else writes as an
+// agent. A client that could name its own author_type could impersonate support
+// inside the customer's own thread.
+//
+// is_internal is forced false for a customer for the same reason. The field is
+// honest on a staff request and meaningless on a customer one — a note nobody
+// but the author can read is not a note, and accepting the flag would let a
+// customer write into the private half of the thread.
 func (uc *CreateMessageUseCase) Execute(
 	ctx context.Context,
-	orgID, ticketID uuid.UUID,
-	authorType model.AuthorType,
-	authorID uuid.UUID,
+	orgID, ticketID, actorID uuid.UUID,
 	req dto.CreateMessageRequest,
+	scope Scope,
 ) (*dto.MessageInfo, error) {
-	if _, err := uc.ticketRepo.GetByID(ctx, orgID, ticketID); err != nil {
+	ticket, err := uc.ticketRepo.GetByID(ctx, orgID, ticketID)
+	if err != nil {
 		return nil, err
+	}
+	if err := scope.Guard(ticket); err != nil {
+		return nil, err
+	}
+
+	authorType := model.AuthorTypeAgent
+	authorID := actorID
+	isInternal := req.IsInternal
+	if scope.IsCustomer() {
+		authorType = model.AuthorTypeCustomer
+		authorID = scope.OwnerID()
+		isInternal = false
 	}
 
 	message := &model.TicketMessage{
@@ -44,7 +62,7 @@ func (uc *CreateMessageUseCase) Execute(
 		TicketID:       ticketID,
 		AuthorType:     authorType,
 		Body:           req.Body,
-		IsInternal:     req.IsInternal,
+		IsInternal:     isInternal,
 	}
 	if authorID != uuid.Nil {
 		id := authorID

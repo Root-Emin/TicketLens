@@ -61,6 +61,10 @@ func (r *stubRoleRepo) GetUserRoles(_ context.Context, userID, orgID uuid.UUID) 
 	return nil, nil
 }
 
+func (r *stubRoleRepo) GetUserRoleNames(context.Context, uuid.UUID, uuid.UUID) ([]string, error) {
+	return nil, nil
+}
+
 func (r *stubRoleRepo) Create(context.Context, *iamModel.Role) error { return nil }
 func (r *stubRoleRepo) GetByID(context.Context, uuid.UUID) (*iamModel.Role, error) {
 	return nil, domainErr.New(domainErr.ErrNotFound, "role not found", nil)

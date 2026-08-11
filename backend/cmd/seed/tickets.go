@@ -80,7 +80,7 @@ func seedTickets(ctx context.Context, d seedDeps) (seedResult, error) {
 			Subject:    t.Subject,
 			Body:       t.Body,
 			CustomerID: customerID,
-		})
+		}, triageUC.OrgWideScope())
 		if err != nil {
 			return result, fmt.Errorf("create ticket %q: %w", t.Subject, err)
 		}
@@ -115,7 +115,7 @@ func seedTickets(ctx context.Context, d seedDeps) (seedResult, error) {
 		if i%priorityOverrideEvery == 0 {
 			target := differentPriority(record.predictedPriority)
 			if _, err := d.updateTicketUC.Execute(ctx, d.orgID, record.id, d.adminID,
-				triageDTO.UpdateTicketRequest{Priority: &target}); err != nil {
+				triageDTO.UpdateTicketRequest{Priority: &target}, triageUC.OrgWideScope()); err != nil {
 				return result, fmt.Errorf("override priority: %w", err)
 			}
 			result.priorityOverrides++
@@ -134,7 +134,7 @@ func seedTickets(ctx context.Context, d seedDeps) (seedResult, error) {
 				continue
 			}
 			if _, err := d.updateTicketUC.Execute(ctx, d.orgID, record.id, d.adminID,
-				triageDTO.UpdateTicketRequest{DepartmentID: &target}); err != nil {
+				triageDTO.UpdateTicketRequest{DepartmentID: &target}, triageUC.OrgWideScope()); err != nil {
 				return result, fmt.Errorf("override department: %w", err)
 			}
 			result.departmentOverrides++
@@ -148,7 +148,7 @@ func seedTickets(ctx context.Context, d seedDeps) (seedResult, error) {
 			continue // tickets are created open
 		}
 		if _, err := d.updateTicketUC.Execute(ctx, d.orgID, record.id, d.adminID,
-			triageDTO.UpdateTicketRequest{Status: &status}); err != nil {
+			triageDTO.UpdateTicketRequest{Status: &status}, triageUC.OrgWideScope()); err != nil {
 			return result, fmt.Errorf("set status: %w", err)
 		}
 	}
@@ -163,21 +163,25 @@ func seedTickets(ctx context.Context, d seedDeps) (seedResult, error) {
 			var err error
 			switch {
 			case n%3 == 2 && n > 0:
-				_, err = d.createMessageUC.Execute(ctx, d.orgID, record.id,
-					triageModel.AuthorTypeAgent, d.adminID, triageDTO.CreateMessageRequest{
+				// Staff scope: writes as an agent and may mark the note
+				// internal. A customer scope would silently clear that flag.
+				_, err = d.createMessageUC.Execute(ctx, d.orgID, record.id, d.adminID,
+					triageDTO.CreateMessageRequest{
 						Body:       internalNotes[d.rng.Intn(len(internalNotes))],
 						IsInternal: true,
-					})
+					}, triageUC.OrgWideScope())
 			case n%2 == 0:
-				_, err = d.createMessageUC.Execute(ctx, d.orgID, record.id,
-					triageModel.AuthorTypeAgent, d.adminID, triageDTO.CreateMessageRequest{
+				_, err = d.createMessageUC.Execute(ctx, d.orgID, record.id, d.adminID,
+					triageDTO.CreateMessageRequest{
 						Body: agentReplies[d.rng.Intn(len(agentReplies))],
-					})
+					}, triageUC.OrgWideScope())
 			default:
-				_, err = d.createMessageUC.Execute(ctx, d.orgID, record.id,
-					triageModel.AuthorTypeCustomer, record.customerID, triageDTO.CreateMessageRequest{
+				// The customer's own scope, so the message is authored as
+				// them — exactly the path the portal takes.
+				_, err = d.createMessageUC.Execute(ctx, d.orgID, record.id, uuid.Nil,
+					triageDTO.CreateMessageRequest{
 						Body: customerFollowUps[d.rng.Intn(len(customerFollowUps))],
-					})
+					}, triageUC.CustomerScope(record.customerID))
 			}
 			if err != nil {
 				return result, fmt.Errorf("create message: %w", err)

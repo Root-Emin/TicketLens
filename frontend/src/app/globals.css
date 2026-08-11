@@ -87,17 +87,31 @@
    The /dashboard, /tickets and /login screens were built against these token
    names before shadcn arrived and claimed the same ones. Rather than restyle
    working, backend-wired code, their original values are re-declared under
-   .legacy-theme, which those layouts apply at their root. Those screens use no
-   portals, so scoping is safe there.
+   .legacy-theme, which those screens apply at their root. They use no portals,
+   so scoping is safe there.
+
+   The VALUES are now aliases of the management panel's palette (section 3)
+   rather than the indigo-on-slate set they started with. Nothing in the markup
+   of those two screens changed: `bg-surface` still resolves, `text-accent` still
+   resolves — they just resolve to the colours the rest of TicketLens is drawn
+   in, so the queue and the dashboard stop being a second visual language living
+   inside the same panel as /team and /departments.
+
+   There is deliberately no prefers-color-scheme block any more. It used to flip
+   this whole wrapper to a near-black ground, which made the admin panel the one
+   surface in the product that inverted with the OS while the staff rail, the
+   portal and every tl-* token beside it stayed light. An operations console is
+   read at a glance next to those screens; it does not get to be a different
+   colour depending on a setting nobody set for it.
    ========================================================================== */
 .legacy-theme {
-  --background: #f8fafc;
-  --surface: #ffffff;
-  --surface-muted: #f1f5f9;
-  --border: #e2e8f0;
-  --foreground: #0f172a;
-  --muted-foreground: #64748b;
-  --accent: #4f46e5;
+  --background: var(--tl-canvas);
+  --surface: var(--tl-card);
+  --surface-muted: var(--tl-line-soft);
+  --border: var(--tl-line);
+  --foreground: var(--tl-ink);
+  --muted-foreground: var(--tl-muted);
+  --accent: var(--tl-blue);
   --accent-foreground: #ffffff;
 
   --priority-low: #64748b;
@@ -105,25 +119,34 @@
   --priority-high: #f59e0b;
   --priority-urgent: #ef4444;
 
-  --success: #16a34a;
-  --warning: #d97706;
-  --danger: #dc2626;
+  --success: var(--tl-green-ink);
+  --warning: var(--tl-orange-ink);
+  --danger: var(--tl-red-ink);
 
   background: var(--background);
   color: var(--foreground);
 }
 
-@media (prefers-color-scheme: dark) {
-  .legacy-theme {
-    --background: #0b1120;
-    --surface: #0f172a;
-    --surface-muted: #1e293b;
-    --border: #1e293b;
-    --foreground: #e2e8f0;
-    --muted-foreground: #94a3b8;
-    --accent: #6366f1;
-    --accent-foreground: #ffffff;
-  }
+/*
+  The four priority colours, promoted to :root.
+
+  They started life inside .legacy-theme, which meant `bg-priority-urgent`
+  silently produced no colour on any screen outside that wrapper — the class
+  resolved, the custom property did not. They are not legacy styling: priority
+  is a domain concept (model/ticket.go) and the ramp is the same everywhere it
+  is drawn.
+
+  .legacy-theme still declares its own copies, so those screens are unchanged;
+  this only gives everyone else a value to inherit. Note that the four here are
+  literals rather than var() references: the ramp is drawn on both the light
+  canvas and the dark marketing bench, so it cannot be expressed in terms of
+  either panel's palette.
+*/
+:root {
+  --priority-low: #64748b;
+  --priority-normal: #0ea5e9;
+  --priority-high: #f59e0b;
+  --priority-urgent: #ef4444;
 }
 
 /* ==========================================================================
@@ -176,6 +199,35 @@
   --tl-red: #ef4444;
   --tl-red-ink: #b91c1c;
   --tl-red-soft: #fef2f2;
+}
+
+/* ==========================================================================
+   4. Marketing palette — the optical bench
+   --------------------------------------------------------------------------
+   The landing page is the only surface that goes dark. It reads as a piece of
+   measuring equipment: --tlm-bench is the ground, and --tl-navy (section 3)
+   sits on top of it as a raised plane, which is why the bench has to be darker
+   than the panel navy rather than equal to it.
+
+   Contrast, measured against --tlm-bench:
+
+     --tlm-ink     15.9:1   --tlm-beam     11.7:1
+     --tlm-muted    7.3:1   --tlm-low       7.6:1
+
+   --tl-blue is 3.75:1 on this ground and is therefore a FILL AND STROKE COLOR
+   HERE, never text. Accent text on the bench uses --tlm-beam. Likewise
+   --priority-low (4.1:1) is replaced by --tlm-low wherever it has to be read.
+   ========================================================================== */
+:root {
+  --tlm-bench: #070d18;
+  --tlm-bench-raised: #101a2e;
+  --tlm-bench-line: #1c2942;
+  --tlm-bench-line-soft: #131f36;
+
+  --tlm-ink: #e8eefb;
+  --tlm-muted: #8ba0c2;
+  --tlm-beam: #7dd3fc;
+  --tlm-low: #94a3b8;
 }
 
 @theme inline {
@@ -263,6 +315,25 @@
   --color-tl-red-ink: var(--tl-red-ink);
   --color-tl-red-soft: var(--tl-red-soft);
 
+  /* marketing palette */
+  --color-tlm-bench: var(--tlm-bench);
+  --color-tlm-bench-raised: var(--tlm-bench-raised);
+  --color-tlm-bench-line: var(--tlm-bench-line);
+  --color-tlm-bench-line-soft: var(--tlm-bench-line-soft);
+  --color-tlm-ink: var(--tlm-ink);
+  --color-tlm-muted: var(--tlm-muted);
+  --color-tlm-beam: var(--tlm-beam);
+  --color-tlm-low: var(--tlm-low);
+
+  /*
+    Marketing type scale. Fluid, because this is the one page that has to hold
+    together from a phone to a 27" display. Separate from --text-ui-*, which is
+    a fixed workspace scale and should stay fixed.
+  */
+  --text-hero: clamp(2.5rem, 1.2rem + 5.6vw, 5.5rem);
+  --text-title: clamp(1.75rem, 1.1rem + 2.6vw, 3rem);
+  --text-lede: clamp(1.0625rem, 0.98rem + 0.5vw, 1.3125rem);
+
   /*
     Staff type scale. Namespaced as text-ui-* rather than overriding Tailwind's
     text-sm/text-xs, which the legacy screens still rely on at their default
@@ -291,6 +362,31 @@
   --animate-collapsible-down: collapsible-down 200ms ease-out;
   --animate-collapsible-up: collapsible-up 200ms ease-out;
 
+  /*
+    The bench's read stroke: one pass down the ticket text while the classifier
+    is working. Above the app's 150–250ms motion budget on purpose — it stands
+    in for a unit of work, so it has to last as long as the work appears to.
+    Everything else on the page stays inside the budget.
+  */
+  --animate-scan: scan 900ms cubic-bezier(0.4, 0, 0.2, 1) 1;
+
+  @keyframes scan {
+    from {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+    15% {
+      opacity: 1;
+    }
+    85% {
+      opacity: 1;
+    }
+    to {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+  }
+
   @keyframes collapsible-down {
     from {
       height: 0;
@@ -311,6 +407,37 @@
       height: 0;
       opacity: 0;
     }
+  }
+}
+
+@layer utilities {
+  /*
+    The landing page's display voice: Archivo pushed out along its `wdth` axis.
+    The width is the point — it is what separates the display face from Inter,
+    which is another grotesque and would otherwise just look like Inter in a
+    larger size.
+
+    Deliberately carries no font-weight or line-height, so `font-bold` and
+    `leading-*` still win on the elements that use it. A utility that set all
+    four would silently beat every Tailwind class placed next to it.
+  */
+  .type-display {
+    /*
+      --font-archivo directly, NOT a --font-* theme key: keys declared in
+      `@theme inline` are substituted into the utilities Tailwind generates and
+      are never emitted as custom properties, so `var(--font-display)` resolves
+      to nothing here and the whole declaration gets dropped — silently, leaving
+      the heading to inherit Inter. The next/font variable is a real property.
+    */
+    font-family: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+    /*
+      Drives Archivo's `wdth` axis. font-stretch rather than
+      font-variation-settings so that `font-bold` still reaches `wght` — setting
+      the axis directly would take this element out of the browser's normal
+      weight handling.
+    */
+    font-stretch: 116%;
+    letter-spacing: -0.028em;
   }
 }
 

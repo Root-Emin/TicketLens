@@ -7,9 +7,13 @@
 # Local virtualenv — platform-specific, reinstalled by pip in the image.
 .venv/
 
-# Trained checkpoints and calibration are mounted at /models by compose, not
-# baked in: the image stays small and a new model does not mean a new build.
-models/
+# models/ is deliberately NOT ignored. The production image bakes the checkpoint
+# in (see ml/Dockerfile) so that an image tag names both the code and the model
+# it serves, and a rollback returns to the model the old version was validated
+# against. It stays out of git; CI fetches it into this directory before build.
+#
+# The development compose still mounts ../ml/models over /models, which shadows
+# the baked copy — so a locally trained checkpoint keeps working with no rebuild.
 
 # Generated corpora, splits and eval fixtures are training-time inputs. Inference
 # never reads them.

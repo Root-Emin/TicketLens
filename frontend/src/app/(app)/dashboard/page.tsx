@@ -35,7 +35,7 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6">
-      <h1 className="mb-5 text-xl font-semibold">Dashboard</h1>
+      <h1 className="mb-5 text-xl font-semibold">Overview</h1>
 
       {/* Headline stats */}
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
