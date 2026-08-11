@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 
+	gatewayDomain "github.com/Root-Emin/TicketLens/internal/domain/gateway"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -26,7 +27,7 @@ func NewSchemaValidator() *SchemaValidator {
 // InterceptRequest validates the request body against the provided schema.
 func (s *SchemaValidator) InterceptRequest(ctx context.Context, req *http.Request) (*http.Request, error) {
 	// Get schema from context (set by gateway pipeline)
-	schemaJSON, ok := ctx.Value("endpoint_schema").([]byte)
+	schemaJSON, ok := gatewayDomain.EndpointSchemaFromContext(ctx)
 	if !ok || len(schemaJSON) == 0 {
 		// No schema defined, skip validation
 		return req, nil
@@ -42,7 +43,7 @@ func (s *SchemaValidator) InterceptRequest(ctx context.Context, req *http.Reques
 	if err != nil {
 		return nil, fmt.Errorf("failed to read request body: %w", err)
 	}
-	defer req.Body.Close()
+	defer func() { _ = req.Body.Close() }()
 
 	if len(body) == 0 {
 		// Empty body, skip validation

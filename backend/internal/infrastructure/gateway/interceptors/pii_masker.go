@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+
+	gatewayDomain "github.com/Root-Emin/TicketLens/internal/domain/gateway"
 )
 
 // PIIMasker masks sensitive fields in request/response bodies.
@@ -38,7 +40,7 @@ func NewPIIMasker(maskFields []string, maskValue string) *PIIMasker {
 // InterceptRequest masks PII in request body if PII masking is enabled.
 func (p *PIIMasker) InterceptRequest(ctx context.Context, req *http.Request) (*http.Request, error) {
 	// Check if PII masking is enabled for this endpoint
-	maskPII, ok := ctx.Value("pii_masking").(bool)
+	maskPII, ok := gatewayDomain.PIIMaskingFromContext(ctx)
 	if !ok || !maskPII {
 		return req, nil
 	}
@@ -56,7 +58,7 @@ func (p *PIIMasker) InterceptRequest(ctx context.Context, req *http.Request) (*h
 	if err != nil {
 		return nil, fmt.Errorf("failed to read request body: %w", err)
 	}
-	defer req.Body.Close()
+	defer func() { _ = req.Body.Close() }()
 
 	if len(body) == 0 {
 		return req, nil
@@ -76,7 +78,7 @@ func (p *PIIMasker) InterceptRequest(ctx context.Context, req *http.Request) (*h
 // InterceptResponse masks PII in response body if PII masking is enabled.
 func (p *PIIMasker) InterceptResponse(ctx context.Context, req *http.Request, resp *http.Response) (*http.Response, error) {
 	// Check if PII masking is enabled for this endpoint
-	maskPII, ok := ctx.Value("pii_masking").(bool)
+	maskPII, ok := gatewayDomain.PIIMaskingFromContext(ctx)
 	if !ok || !maskPII {
 		return resp, nil
 	}
@@ -89,7 +91,7 @@ func (p *PIIMasker) InterceptResponse(ctx context.Context, req *http.Request, re
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if len(body) == 0 {
 		return resp, nil

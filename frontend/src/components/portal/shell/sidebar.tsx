@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { Ticket } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import {

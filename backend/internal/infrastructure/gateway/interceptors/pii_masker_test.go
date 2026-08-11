@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"testing"
 
+	gatewayDomain "github.com/Root-Emin/TicketLens/internal/domain/gateway"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,7 +70,7 @@ func TestPIIMasker_InterceptRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
 			if tt.maskPII {
-				ctx = context.WithValue(ctx, "pii_masking", true)
+				ctx = gatewayDomain.WithPIIMasking(ctx, true)
 			}
 
 			bodyJSON, err := json.Marshal(tt.body)
@@ -100,7 +101,7 @@ func TestPIIMasker_InterceptRequest(t *testing.T) {
 func TestPIIMasker_InterceptResponse(t *testing.T) {
 	masker := NewPIIMasker([]string{"password", "token"}, "***")
 
-	ctx := context.WithValue(context.Background(), "pii_masking", true)
+	ctx := gatewayDomain.WithPIIMasking(context.Background(), true)
 	body := map[string]interface{}{
 		"user": map[string]interface{}{
 			"id":       "123",
@@ -132,7 +133,7 @@ func TestPIIMasker_InterceptResponse(t *testing.T) {
 
 func TestPIIMasker_NonJSONBody(t *testing.T) {
 	masker := NewPIIMasker([]string{"password"}, "***")
-	ctx := context.WithValue(context.Background(), "pii_masking", true)
+	ctx := gatewayDomain.WithPIIMasking(context.Background(), true)
 
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "/test", bytes.NewReader([]byte("not json")))
 	result, err := masker.InterceptRequest(ctx, req)

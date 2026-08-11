@@ -81,7 +81,7 @@ func deriveEventType(event events.Event) string {
 	// Use reflection to get the struct name and convert to dot-notation.
 	// e.g. "UserRegistered" -> "user.registered"
 	t := reflect.TypeOf(event)
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	name := t.Name()

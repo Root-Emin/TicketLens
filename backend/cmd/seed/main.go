@@ -299,7 +299,7 @@ func flushPermissionCache(ctx context.Context, cfg *config.Config) (int, error) 
 		// Redis is optional for local dev; skip quietly when not up.
 		return 0, nil
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	var cursor uint64
 	var deleted int

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	gatewayDomain "github.com/Root-Emin/TicketLens/internal/domain/gateway"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,8 +23,8 @@ func TestRequestTransformer_InterceptRequest(t *testing.T) {
 
 	transformer := NewRequestTransformer(headerTransforms, queryTransforms, nil)
 
-	ctx := context.WithValue(context.Background(), "org_id", "org-123")
-	ctx = context.WithValue(ctx, "user_id", "user-456")
+	ctx := gatewayDomain.WithOrgID(context.Background(), "org-123")
+	ctx = gatewayDomain.WithUserID(ctx, "user-456")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "/test?existing=value", nil)
 	require.NoError(t, err)

@@ -1,0 +1,14 @@
+# golangci-lint configuration.
+#
+# `version` is the schema version of this file, not the linter release — that is
+# pinned in .github/workflows/ci.yml, so a golangci-lint release cannot turn main
+# red on its own. Bump the two together.
+#
+# Naming the linter set explicitly is the same idea: `standard` today is
+# errcheck, govet, ineffassign, staticcheck and unused, and writing it down means
+# a change to what golangci-lint considers default lands as a deliberate edit
+# here rather than as a surprise failure on somebody else's pull request.
+version: "2"
+
+linters:
+  default: standard

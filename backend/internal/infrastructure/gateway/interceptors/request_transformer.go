@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	gatewayDomain "github.com/Root-Emin/TicketLens/internal/domain/gateway"
 )
 
 // RequestTransformer transforms request headers, query params, and body.
@@ -53,7 +55,7 @@ func (rt *RequestTransformer) InterceptRequest(ctx context.Context, req *http.Re
 		if err != nil {
 			return nil, fmt.Errorf("failed to read request body: %w", err)
 		}
-		defer req.Body.Close()
+		defer func() { _ = req.Body.Close() }()
 
 		if len(body) > 0 {
 			transformedBody, err := rt.bodyTransform(body)
@@ -81,13 +83,13 @@ func (rt *RequestTransformer) transformTemplate(template string, req *http.Reque
 	ctx := req.Context()
 
 	// Replace common variables
-	if orgID, ok := ctx.Value("org_id").(string); ok {
+	if orgID, ok := gatewayDomain.OrgIDFromContext(ctx); ok {
 		result = strings.ReplaceAll(result, "{org_id}", orgID)
 	}
-	if userID, ok := ctx.Value("user_id").(string); ok {
+	if userID, ok := gatewayDomain.UserIDFromContext(ctx); ok {
 		result = strings.ReplaceAll(result, "{user_id}", userID)
 	}
-	if appID, ok := ctx.Value("app_id").(string); ok {
+	if appID, ok := gatewayDomain.AppIDFromContext(ctx); ok {
 		result = strings.ReplaceAll(result, "{app_id}", appID)
 	}
 

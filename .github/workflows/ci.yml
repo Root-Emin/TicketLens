@@ -28,9 +28,9 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
@@ -47,9 +47,22 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - uses: golangci/golangci-lint-action@v6
+      # v6 of this action drives golangci-lint v1 and passes it flags v2 does not
+      # accept, which is how `version: latest` failed with exit 3 rather than
+      # with a lint finding. v9 speaks v2.
+      #
+      # goinstall rather than the default prebuilt binary: this module is on Go
+      # 1.26, and a release binary compiled against an older toolchain cannot
+      # always read its package data. Building golangci-lint with the same Go the
+      # rest of this job uses removes that as a source of failure.
+      #
+      # The version is pinned, not `latest`, so a golangci-lint release cannot
+      # fail main on a commit that did not change any Go. Bump it together with
+      # backend/.golangci.yml.
+      - uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: v2.12.2
+          install-mode: goinstall
           working-directory: backend
 
       # The image build compiles both binaries; nothing else in this job would
@@ -64,9 +77,9 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -94,9 +107,9 @@ jobs:
       run:
         working-directory: backend/ml
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 

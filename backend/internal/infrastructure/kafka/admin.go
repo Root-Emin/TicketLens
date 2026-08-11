@@ -30,7 +30,7 @@ func EnsureTopics(ctx context.Context, brokerAddr string, topics []string, numPa
 	if err != nil {
 		return fmt.Errorf("kafka dial: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	controller, err := conn.Controller()
 	if err != nil {
@@ -41,7 +41,7 @@ func EnsureTopics(ctx context.Context, brokerAddr string, topics []string, numPa
 	if err != nil {
 		return fmt.Errorf("kafka controller dial: %w", err)
 	}
-	defer controllerConn.Close()
+	defer func() { _ = controllerConn.Close() }()
 
 	topicConfigs := make([]kafkago.TopicConfig, 0, len(topics))
 	for _, t := range topics {

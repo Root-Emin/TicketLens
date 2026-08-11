@@ -21,6 +21,11 @@ import { cn } from "@/lib/utils";
   read stroke runs, HOLD_MS is how long the settled verdict stays up. Selecting
   a ticket by hand stops the cycle for good — a visitor who has taken control
   should not have it taken back.
+
+  A read is *requested* by whatever moved the ticket (the advance timer, or a
+  click) and only ever *cleared* by an effect. Nothing sets state synchronously
+  in an effect body, which is what keeps the cycle to one render per step
+  instead of the cascade a mount-time setReading(true) would cause.
 */
 
 const SCAN_MS = 900;
@@ -28,7 +33,7 @@ const HOLD_MS = 4200;
 
 export function Bench() {
   const [index, setIndex] = useState(0);
-  const [reading, setReading] = useState(false);
+  const [readPending, setReadPending] = useState(true);
   const [paused, setPaused] = useState(false);
 
   // Honour the OS setting by not running the cycle at all. The base layer
@@ -37,19 +42,23 @@ export function Bench() {
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
   const still = reduced || paused;
 
+  // Derived rather than stored, so reduced motion suppresses the stroke without
+  // a state write — under `reduced` this is false forever and the clear timer
+  // below never arms, leaving the verdict settled from the first frame.
+  const reading = readPending && !reduced;
+
   useEffect(() => {
-    if (reduced) return;
-    setReading(true);
-    const t = setTimeout(() => setReading(false), SCAN_MS);
+    if (!reading) return;
+    const t = setTimeout(() => setReadPending(false), SCAN_MS);
     return () => clearTimeout(t);
-  }, [index, reduced]);
+  }, [index, reading]);
 
   useEffect(() => {
     if (still) return;
-    const t = setTimeout(
-      () => setIndex((i) => (i + 1) % SAMPLES.length),
-      SCAN_MS + HOLD_MS,
-    );
+    const t = setTimeout(() => {
+      setIndex((i) => (i + 1) % SAMPLES.length);
+      setReadPending(true);
+    }, SCAN_MS + HOLD_MS);
     return () => clearTimeout(t);
   }, [index, still]);
 
@@ -59,6 +68,7 @@ export function Bench() {
   /** Hand control to the visitor and keep it there. */
   function select(next: number) {
     setIndex(next);
+    setReadPending(true);
     setPaused(true);
   }
 

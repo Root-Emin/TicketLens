@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Ticket } from "lucide-react";
 
 import { LensRings } from "./lens-rings";
 

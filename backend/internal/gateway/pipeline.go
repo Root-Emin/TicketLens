@@ -153,15 +153,15 @@ func (p *Pipeline) Enforce(next http.Handler) http.Handler {
 		}
 
 		// 6. Prepare context for interceptors
-		ctx = context.WithValue(ctx, "endpoint_schema", endpoint.Schema)
-		ctx = context.WithValue(ctx, "pii_masking", endpoint.PIIMasking)
-		ctx = context.WithValue(ctx, "endpoint_id", endpoint.ID.String())
-		ctx = context.WithValue(ctx, "app_id", appID.String())
+		ctx = gatewayDomain.WithEndpointSchema(ctx, endpoint.Schema)
+		ctx = gatewayDomain.WithPIIMasking(ctx, endpoint.PIIMasking)
+		ctx = gatewayDomain.WithEndpointID(ctx, endpoint.ID.String())
+		ctx = gatewayDomain.WithAppID(ctx, appID.String())
 		if orgID, ok := middleware.OrgIDFromContext(ctx); ok {
-			ctx = context.WithValue(ctx, "org_id", orgID.String())
+			ctx = gatewayDomain.WithOrgID(ctx, orgID.String())
 		}
 		if userID, ok := middleware.UserIDFromContext(ctx); ok {
-			ctx = context.WithValue(ctx, "user_id", userID.String())
+			ctx = gatewayDomain.WithUserID(ctx, userID.String())
 		}
 		r = r.WithContext(ctx)
 
@@ -189,7 +189,7 @@ func (p *Pipeline) Enforce(next http.Handler) http.Handler {
 			}
 
 			if backendResp != nil {
-				defer backendResp.Body.Close()
+				defer func() { _ = backendResp.Body.Close() }()
 
 				// Copy response headers
 				for k, v := range backendResp.Header {
@@ -217,44 +217,13 @@ func (p *Pipeline) Enforce(next http.Handler) http.Handler {
 			"backend_action":  endpoint.BackendAction,
 			"note":            fmt.Sprintf("No handler found for '%s'. Register a handler or configure HTTP proxy.", endpoint.BackendService),
 		})
-		return
 
-		// 9. Apply response interceptors (if needed)
-		// Note: Full response interception requires capturing the response,
-		// which is more complex. For now, we handle it in middleware or
-		// use a response wrapper.
+		// 9. Response interceptors do not run yet. Doing so means buffering the
+		// backend response instead of streaming it straight to the client, so
+		// the wrapper that would capture it is deliberately not written until
+		// something needs it — a dead one only rots. p.interceptors.
+		// InterceptResponse is the hook it would call.
 	})
-}
-
-// responseWriter wraps http.ResponseWriter to capture response for interceptors.
-type responseWriter struct {
-	http.ResponseWriter
-	statusCode  int
-	header      http.Header
-	wroteHeader bool
-}
-
-func (rw *responseWriter) Header() http.Header {
-	return rw.header
-}
-
-func (rw *responseWriter) WriteHeader(code int) {
-	if rw.wroteHeader {
-		return
-	}
-	rw.statusCode = code
-	rw.wroteHeader = true
-	for k, v := range rw.header {
-		rw.ResponseWriter.Header()[k] = v
-	}
-	rw.ResponseWriter.WriteHeader(code)
-}
-
-func (rw *responseWriter) Write(b []byte) (int, error) {
-	if !rw.wroteHeader {
-		rw.WriteHeader(http.StatusOK)
-	}
-	return rw.ResponseWriter.Write(b)
 }
 
 // checkRateLimit uses a Redis sliding window counter.

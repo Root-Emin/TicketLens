@@ -183,11 +183,8 @@ func (r *DynamicHandlerResolver) buildTargetURL(baseURL string, endpoint *model.
 	// Use endpoint path or original request path
 	path := endpoint.Path
 	if path == "" {
-		path = req.URL.Path
 		// Remove /api/v1 prefix if present
-		if strings.HasPrefix(path, "/api/v1") {
-			path = strings.TrimPrefix(path, "/api/v1")
-		}
+		path = strings.TrimPrefix(req.URL.Path, "/api/v1")
 	}
 
 	// Build full URL

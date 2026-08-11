@@ -134,7 +134,7 @@ func run() error {
 		log.Warn("redis unavailable, running without cache", "error", err)
 		redisClient = nil
 	} else {
-		defer redisClient.Close()
+		defer func() { _ = redisClient.Close() }()
 		log.Info("connected to redis")
 	}
 

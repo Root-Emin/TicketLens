@@ -64,33 +64,27 @@ func (h *Handler) Readiness(w http.ResponseWriter, r *http.Request) {
 	healthy := true
 
 	// Check Postgres
-	switch {
-	case h.db == nil:
+	if h.db == nil {
 		services["postgres"] = "not_configured"
 		healthy = false
-	default:
-		if err := h.db.Ping(ctx); err != nil {
-			slog.Error("readiness check failed", "service", "postgres", "error", err)
-			services["postgres"] = "unhealthy"
-			healthy = false
-		} else {
-			services["postgres"] = "healthy"
-		}
+	} else if err := h.db.Ping(ctx); err != nil {
+		slog.Error("readiness check failed", "service", "postgres", "error", err)
+		services["postgres"] = "unhealthy"
+		healthy = false
+	} else {
+		services["postgres"] = "healthy"
 	}
 
 	// Check Redis
-	switch {
-	case h.redis == nil:
+	if h.redis == nil {
 		services["redis"] = "not_configured"
 		healthy = false
-	default:
-		if err := h.redis.Ping(ctx).Err(); err != nil {
-			slog.Error("readiness check failed", "service", "redis", "error", err)
-			services["redis"] = "unhealthy"
-			healthy = false
-		} else {
-			services["redis"] = "healthy"
-		}
+	} else if err := h.redis.Ping(ctx).Err(); err != nil {
+		slog.Error("readiness check failed", "service", "redis", "error", err)
+		services["redis"] = "unhealthy"
+		healthy = false
+	} else {
+		services["redis"] = "healthy"
 	}
 
 	status := "ready"

@@ -91,13 +91,6 @@ func (c *client) unsubscribe(room model.RoomKey) {
 	delete(c.rooms, room)
 }
 
-func (c *client) isSubscribed(room model.RoomKey) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	_, ok := c.rooms[room]
-	return ok
-}
-
 func (c *client) closeSend() {
 	c.mu.Lock()
 	defer c.mu.Unlock()

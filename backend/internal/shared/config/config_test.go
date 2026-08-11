@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,10 +21,8 @@ func TestLoad_Defaults(t *testing.T) {
 }
 
 func TestLoad_EnvironmentOverrides(t *testing.T) {
-	os.Setenv("SERVER_PORT", "9090")
-	os.Setenv("DB_HOST", "db.example.com")
-	defer os.Unsetenv("SERVER_PORT")
-	defer os.Unsetenv("DB_HOST")
+	t.Setenv("SERVER_PORT", "9090")
+	t.Setenv("DB_HOST", "db.example.com")
 
 	cfg := Load()
 	assert.Equal(t, 9090, cfg.Server.Port)
@@ -33,10 +30,8 @@ func TestLoad_EnvironmentOverrides(t *testing.T) {
 }
 
 func TestLoad_DBPoolInt32Bounds(t *testing.T) {
-	os.Setenv("DB_MAX_CONNS", "50")
-	os.Setenv("DB_MIN_CONNS", "2147483648")
-	defer os.Unsetenv("DB_MAX_CONNS")
-	defer os.Unsetenv("DB_MIN_CONNS")
+	t.Setenv("DB_MAX_CONNS", "50")
+	t.Setenv("DB_MIN_CONNS", "2147483648")
 
 	cfg := Load()
 	assert.Equal(t, int32(50), cfg.Database.MaxConns)
